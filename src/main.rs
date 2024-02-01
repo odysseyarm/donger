@@ -2,6 +2,8 @@
 #![no_main]
 
 mod paj7025;
+#[macro_use]
+mod pinout;
 
 use core::mem::swap;
 
@@ -22,6 +24,7 @@ use paj7025::Paj7025;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
+// this could go in pre_init, but it already works so /shrug
 fn check_regout0() {
     // if the ats_mot_nrf52840 board is powered from USB
     // (high voltage mode), GPIO output voltage is set to 1.8 volts by
@@ -101,13 +104,13 @@ async fn main(spawner: Spawner) {
         Spim::new(
             &mut p.SPI3,
             Irqs,
-            &mut p.P1_00,
-            &mut p.P0_22,
-            &mut p.P1_07,
+            &mut pinout!(p.wf_sck),
+            &mut pinout!(p.wf_miso),
+            &mut pinout!(p.wf_mosi),
             Default::default(),
         ),
-        &mut p.P0_06,
-        &mut p.P1_13,
+        &mut pinout!(p.wf_cs),
+        &mut pinout!(p.wf_fod),
     )
     .await;
     // Run the USB device.
@@ -148,7 +151,14 @@ async fn main(spawner: Spawner) {
 
     let mut config = spis::Config::default();
     config.mode = spis::MODE_3;
-    let mut spis = Spis::new_rxonly(&mut p.SPI2, Irqs, &mut p.P0_06, &mut p.P1_00, &mut p.P1_07, config);
+    let mut spis = Spis::new_rxonly(
+        &mut p.SPI2,
+        Irqs,
+        &mut pinout!(p.wf_cs),
+        &mut pinout!(p.wf_sck),
+        &mut pinout!(p.wf_mosi),
+        config,
+    );
     static DATA1: StaticCell<[u8; 98*98 + 98*3]> = StaticCell::new();
     static DATA2: StaticCell<[u8; 98*98 + 98*3]> = StaticCell::new();
     let mut data1 = DATA1.init_with(|| [0; 98*98 + 98*3]);
