@@ -201,8 +201,13 @@ async fn main(spawner: Spawner) {
     let near_loop = paj7025_image_loop(1, near_spis, nf_free_buffers.receiver(), image_buffers.sender());
     join3(near_loop, wide_loop, async {
         loop {
-            let buf @ &mut [.., id, len0, len1] = image_buffers.receive().await;
-            write_serial(&mut class, &[id, len0, len1]).await;
+            let buf = if let Ok(b) = image_buffers.try_receive() {
+                b
+            } else {
+                info!("usb feed is starved D:");
+                image_buffers.receive().await
+            };
+            let id = buf[buf.len()-3];
             write_serial(&mut class, buf).await;
             if id == 0 {
                 wf_free_buffers.try_send(buf).unwrap();
@@ -225,7 +230,12 @@ where
     M: RawMutex,
 {
     loop {
-        let buffer = free_buffers.receive().await;
+        let buffer = if let Ok(b) = free_buffers.try_receive() {
+            b
+        } else {
+            info!("paj is starved D:");
+            free_buffers.receive().await
+        };
         let result = spis.read(buffer).await;
         if let Ok(len) = result {
             let len16 = len as u16;
