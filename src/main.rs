@@ -9,7 +9,7 @@ use core::mem::swap;
 
 use defmt::{info, Debug2Format};
 use embassy_executor::Spawner;
-use embassy_futures::join::join;
+use embassy_futures::join::{join, join3};
 use embassy_nrf::{
     config::{Config, HfclkSource}, gpio::{self, Input, Level, Output, OutputDrive, Pull}, gpiote::{self, InputChannel, InputChannelPolarity, OutputChannel, OutputChannelPolarity}, pac::{self, power::mainregstatus::MAINREGSTATUS_A}, peripherals, ppi::Ppi, spim::{self, Spim}, spis::{self, Spis}, usb::{
         self,
@@ -17,6 +17,7 @@ use embassy_nrf::{
         Driver, Instance,
     }, Peripheral
 };
+use embassy_sync::{blocking_mutex::raw::{NoopRawMutex, RawMutex}, channel::{Channel, Receiver, Sender}};
 use embassy_usb::{
     class::cdc_acm::{CdcAcmClass, State}, driver::EndpointError, Builder, UsbDevice
 };
@@ -64,7 +65,9 @@ embassy_nrf::bind_interrupts!(struct Irqs {
     USBD => usb::InterruptHandler<peripherals::USBD>;
     POWER_CLOCK => usb::vbus_detect::InterruptHandler;
     SPIM3 => spim::InterruptHandler<peripherals::SPI3>;
+    SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1 => spim::InterruptHandler<peripherals::TWISPI1>;
     SPIM2_SPIS2_SPI2 => spis::InterruptHandler<peripherals::SPI2>;
+    SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0 => spis::InterruptHandler<peripherals::TWISPI0>;
 });
 
 fn log_stuff() {
@@ -91,8 +94,12 @@ fn log_stuff() {
     );
 }
 
+const NUM_BUFFERS: usize = 6;
+static SHARED_BUFFERS: StaticCell<[[u8; 98*98 + 98*3]; NUM_BUFFERS]> = StaticCell::new();
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    let shared_buffers = SHARED_BUFFERS.init_with(|| [[0; 98*98+98*3]; NUM_BUFFERS]);
     check_regout0();
     let mut config = Config::default();
     config.hfclk_source = HfclkSource::ExternalXtal;
@@ -111,21 +118,32 @@ async fn main(spawner: Spawner) {
         ),
         &mut pinout!(p.wf_cs),
         &mut pinout!(p.wf_fod),
-    )
-    .await;
+    ).await;
+    let near = Paj7025::new(
+        Spim::new(
+            &mut p.TWISPI1,
+            Irqs,
+            &mut pinout!(p.nf_sck),
+            &mut pinout!(p.nf_miso),
+            &mut pinout!(p.nf_mosi),
+            Default::default(),
+        ),
+        &mut pinout!(p.nf_cs),
+        &mut pinout!(p.nf_fod),
+    ).await;
     // Run the USB device.
     let (mut class, usb) = usb_device(p.USBD);
     spawner.must_spawn(run_usb(usb));
     class.wait_connection().await;
 
     // Wait for something to get sent
-    static FEATURE_BUF: StaticCell<[u8; 256]> = StaticCell::new();
-    let feature_buf = FEATURE_BUF.init_with(|| [0; 256]);
+    let feature_buf: &mut [u8; 256] = shared_buffers[0][..256].as_mut().try_into().unwrap();
     loop {
         let v = wait_for_serial(&mut class).await;
         if v == b'a' {
             break;
         } else {
+            // only read from wide because i'm lazy
             wide.trigger_fod().await;
             embassy_time::Timer::after_millis(1000/200).await;
             wide.set_bank(0x05).await;
@@ -135,7 +153,7 @@ async fn main(spawner: Spawner) {
     }
 
     info!("Transitioning to image mode");
-    wide.image_mode().await;
+    join(wide.image_mode(), near.image_mode()).await;
 
     // let mut cursed_spim = paj7025::image_mode_spim(
     //     &mut p.SPI3,
@@ -151,7 +169,7 @@ async fn main(spawner: Spawner) {
 
     let mut config = spis::Config::default();
     config.mode = spis::MODE_3;
-    let mut spis = Spis::new_rxonly(
+    let wide_spis = Spis::new_rxonly(
         &mut p.SPI2,
         Irqs,
         &mut pinout!(p.wf_cs),
@@ -159,22 +177,65 @@ async fn main(spawner: Spawner) {
         &mut pinout!(p.wf_mosi),
         config,
     );
-    static DATA1: StaticCell<[u8; 98*98 + 98*3]> = StaticCell::new();
-    static DATA2: StaticCell<[u8; 98*98 + 98*3]> = StaticCell::new();
-    let mut data1 = DATA1.init_with(|| [0; 98*98 + 98*3]);
-    let mut data2 = DATA2.init_with(|| [0; 98*98 + 98*3]);
-    let mut result = spis.read(data1).await;
-    loop {
-        if let Ok(len) = result {
-            swap(&mut data1, &mut data2);
-            let fut = async {
-                let len16 = len as u16;
-                write_serial(&mut class, &len16.to_le_bytes()).await;
-                write_serial(&mut class, &data2[..len]).await;
-                let c = wait_for_serial(&mut class).await;
-            };
-            (result, _) = join(spis.read(data1), fut).await;
+    let mut config = spis::Config::default();
+    config.mode = spis::MODE_3;
+    let near_spis = Spis::new_rxonly(
+        &mut p.TWISPI0,
+        Irqs,
+        &mut pinout!(p.nf_cs),
+        &mut pinout!(p.nf_sck),
+        &mut pinout!(p.nf_mosi),
+        config,
+    );
+    let nf_free_buffers = Channel::<NoopRawMutex, _, 3>::new();
+    let wf_free_buffers = Channel::<NoopRawMutex, _, 3>::new();
+    let image_buffers = Channel::<NoopRawMutex, _, NUM_BUFFERS>::new();
+    let [b0, b1, b2, b3, b4, b5] = shared_buffers;
+    nf_free_buffers.try_send(b0).unwrap();
+    nf_free_buffers.try_send(b1).unwrap();
+    nf_free_buffers.try_send(b2).unwrap();
+    wf_free_buffers.try_send(b3).unwrap();
+    wf_free_buffers.try_send(b4).unwrap();
+    wf_free_buffers.try_send(b5).unwrap();
+    let wide_loop = paj7025_image_loop(0, wide_spis, wf_free_buffers.receiver(), image_buffers.sender());
+    let near_loop = paj7025_image_loop(1, near_spis, nf_free_buffers.receiver(), image_buffers.sender());
+    join3(near_loop, wide_loop, async {
+        loop {
+            let buf @ &mut [.., id, len0, len1] = image_buffers.receive().await;
+            write_serial(&mut class, &[id, len0, len1]).await;
+            write_serial(&mut class, buf).await;
+            if id == 0 {
+                wf_free_buffers.try_send(buf).unwrap();
+            } else {
+                nf_free_buffers.try_send(buf).unwrap();
+            }
+            wait_for_serial(&mut class).await;
         }
+    }).await;
+}
+
+async fn paj7025_image_loop<'b, T, M, const N: usize, const O: usize>(
+    id: u8,
+    mut spis: Spis<'_, T>,
+    free_buffers: Receiver<'_, M, &'b mut [u8; 98*98 + 98*3], N>,
+    image_buffers: Sender<'_, M, &'b mut [u8; 98*98 + 98*3], O>,
+)
+where
+    T: spis::Instance,
+    M: RawMutex,
+{
+    loop {
+        let buffer = free_buffers.receive().await;
+        let result = spis.read(buffer).await;
+        if let Ok(len) = result {
+            let len16 = len as u16;
+            let len_bytes = len16.to_le_bytes();
+            // put the len bytes at the end because there is nothing there that we care about.
+            buffer[98*98 + 98*3 - 3] = id;
+            buffer[98*98 + 98*3 - 2] = len_bytes[0];
+            buffer[98*98 + 98*3 - 1] = len_bytes[1];
+        }
+        image_buffers.try_send(buffer).unwrap();
     }
 }
 
@@ -189,7 +250,7 @@ async fn write_serial<'d, D: embassy_usb::driver::Driver<'d>>(class: &mut CdcAcm
 }
 
 async fn wait_for_serial<'d, D: embassy_usb::driver::Driver<'d>>(class: &mut CdcAcmClass<'d, D>) -> u8 {
-    'outer: loop {
+    loop {
         let mut buf = [0; 64];
         loop {
             let Ok(_n) = class.read_packet(&mut buf).await else { break };

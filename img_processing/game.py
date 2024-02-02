@@ -1,33 +1,44 @@
 #!/usr/bin/env python3
 
 # Example file showing a basic pygame "game loop"
+from typing import Any
 import pygame, sys, serial
+import numpy as np
+import numpy.typing as npt
 
-def shiftl(d: bytes, n: int) -> bytes:
+def shiftl(d: bytes, n: int, out: npt.NDArray[np.byte]):
     """Shift the data to the left n bits"""
-    r = [(d[0] << n) & 0xff]
+    out[0] = (d[0] << n) & 0xff
     for i in range(1, len(d)):
-        r[-1] |= d[i]>>(8-n)
-        r.append((d[i] << n) & 0xff)
-    return bytes(r)
+        if i < len(out):
+            out[i-1] |= d[i]>>(8-n)
+            out[i] = (d[i] << n) & 0xff
 
-def shiftr(d: bytes, n: int) -> bytes:
+def shiftr(d: bytes, n: int, out: npt.NDArray[Any]):
     """Shift the data to the right n bits (n<8)"""
-    r = [d[0] >> n, (d[0] << (8-n)) & 0xff]
+    # r = [d[0] >> n, (d[0] << (8-n)) & 0xff]
+    out[0] = d[0] >> n
+    out[1] = (d[0] << (8-n)) & 0xff
     for i in range(1, len(d)):
-        r[-1] |= d[i]>>n
-        r.append((d[i] << (8-n)) & 0xff)
-    return bytes(r)
+        if i+1 < len(out):
+            out[i] |= d[i]>>n
+            out[i+1] = (d[i] << (8-n)) & 0xff
 
 serial_file = sys.argv[1] if len(sys.argv) >= 2 else "/dev/ttyACM1"
 ser = serial.Serial(serial_file, timeout=1)
 
 # pygame setup
 pygame.init()
-screen = pygame.display.set_mode((700, 700))
+screen = pygame.display.set_mode((686*2 + 5, 700))
 clock = pygame.time.Clock()
 running = True
 
+surfaces = [pygame.image.frombytes(bytes([0] * (98*98)), (98, 98), "P") for _ in [0,1]]
+for s in surfaces:
+    s.set_palette([(x, x, x) for x in range(256)])
+array = np.array([[0]*98]*98, dtype=np.byte)
+
+screen.fill("purple")
 while running:
     # poll for events
     # pygame.QUIT event means the user clicked X to close your window
@@ -36,25 +47,24 @@ while running:
             running = False
 
     ser.write(b"a")
-    length_bytes = ser.read(2)
-    length = length_bytes[0] | (length_bytes[1]<<8)
-    data = ser.read(length)
+    id, len0, len1 = ser.read(3)
+    length = len0 | (len1<<8)
+    print(id, length)
+    data = ser.read(9898)
     if length == 9898:
-        data = shiftl(data, 4)
+        data = shiftl(data, 4, array.reshape(98*98))
     elif length == 9897:
-        data = shiftr(data, 3)
+        data = shiftr(data, 3, array.reshape(98*98))
     else:
         print(f"weird length {length}")
         continue
 
+    pygame.surfarray.blit_array(surfaces[id], array)
     # fill the screen with a color to wipe away anything from last frame
-    screen.fill("purple")
 
     # RENDER YOUR GAME HERE
-    surface = pygame.image.frombytes(data[:98*98], (98, 98), "P")
-    surface.set_palette([(x, x, x) for x in range(256)])
-    scaled = pygame.transform.scale(surface, (686, 686))
-    screen.blit(scaled, (0, 0))
+    scaled = pygame.transform.scale(surfaces[id], (686, 686))
+    screen.blit(scaled, (700*id, 0))
 
     # flip() the display to put your work on screen
     pygame.display.flip()

@@ -110,9 +110,8 @@ impl<'d, T: Instance> Paj7025<'d, T> {
         // https://github.com/embassy-rs/embassy/pull/2485 :pray:
         // config.bit_order = BitOrder::LSB_FIRST;
         spim.set_config(&config).unwrap();
-        // TODO don't hardcode SPIM3 lmao
-        // regs::<T>().config.write(|w| w.order().lsb_first());
-        unsafe { &*pac::SPIM3::ptr() }.config.write(|w| w.order().lsb_first());
+        regs::<T>().config.write(|w| w.order().lsb_first());
+        // unsafe { &*pac::SPIM3::ptr() }.config.write(|w| w.order().lsb_first());
         let mut paj = Self { spim, cs, fod };
         paj.initial_power().await;
         info!("Paj7025 initial power");
