@@ -16,23 +16,26 @@ pub struct Paj7025<'d, T: Instance> {
 
 impl<'d, T: Instance> Paj7025<'d, T> {
     pub async fn write_register(&mut self, address: u8, data: u8) {
+        let cmd = [0];
         self.cs.set_low();
-        self.spim.write(&[0]).await.unwrap();
+        self.spim.write(&cmd).await.unwrap();
         self.spim.write(&[address]).await.unwrap();
         self.spim.write(&[data]).await.unwrap();
         self.cs.set_high();
     }
     pub fn write_register_blocking(&mut self, address: u8, data: u8) {
+        let cmd = [0];
         self.cs.set_low();
-        self.spim.blocking_write(&[0]).unwrap();
+        self.spim.blocking_write(&cmd).unwrap();
         self.spim.blocking_write(&[address]).unwrap();
         self.spim.blocking_write(&[data]).unwrap();
         self.cs.set_high();
     }
 
     pub async fn read_register(&mut self, address: u8) -> u8 {
+        let cmd = [1 << 7];
         self.cs.set_low();
-        self.spim.write(&[1 << 7]).await.unwrap();
+        self.spim.write(&cmd).await.unwrap();
         self.spim.write(&[address]).await.unwrap();
         let mut data = [0];
         self.spim.read(&mut data).await.unwrap();
@@ -48,8 +51,9 @@ impl<'d, T: Instance> Paj7025<'d, T> {
             return;
         }
 
+        let cmd = [(1 << 7) | 1];
         self.cs.set_low();
-        self.spim.write(&[(1 << 7) | 1]).await.unwrap();
+        self.spim.write(&cmd).await.unwrap();
         self.spim.write(&[address]).await.unwrap();
         self.spim.read(buf).await.unwrap();
         self.cs.set_high();
@@ -63,8 +67,9 @@ impl<'d, T: Instance> Paj7025<'d, T> {
             return;
         }
 
+        let cmd = [1];
         self.cs.set_low();
-        self.spim.write(&[1]).await.unwrap();
+        self.spim.write(&cmd).await.unwrap();
         self.spim.write(&[address]).await.unwrap();
         self.spim.write(buf).await.unwrap();
         self.cs.set_high();
@@ -78,8 +83,9 @@ impl<'d, T: Instance> Paj7025<'d, T> {
             return;
         }
 
+        let cmd = [1];
         self.cs.set_low();
-        self.spim.blocking_write(&[1]).unwrap();
+        self.spim.blocking_write(&cmd).unwrap();
         self.spim.blocking_write(&[address]).unwrap();
         self.spim.blocking_write(buf).unwrap();
         self.cs.set_high();
@@ -136,7 +142,6 @@ impl<'d, T: Instance> Paj7025<'d, T> {
             }
         }
         paj.initialize_settings().await;
-        paj.write_register_blocking(0x0c, 0x03); // B_ggh
         // paj.initialize_settings2();
         paj
     }
