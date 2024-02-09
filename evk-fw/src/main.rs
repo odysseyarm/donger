@@ -5,21 +5,17 @@
 mod pinout;
 mod pixart;
 
-use core::mem::swap;
-
 use defmt::{info, Debug2Format};
 use embassy_executor::Spawner;
-use embassy_futures::join::{join, join3};
 use embassy_nrf::{
-    config::{Config, HfclkSource}, gpio::{self, Input, Level, Output, OutputDrive, Pull}, gpiote::{self, InputChannel, InputChannelPolarity, OutputChannel, OutputChannelPolarity}, pac::{self, power::mainregstatus::MAINREGSTATUS_A}, peripherals, ppi::Ppi, spim::{self, Spim}, spis::{self, Spis}, usb::{
+    config::{Config, HfclkSource}, pac::{self, power::mainregstatus::MAINREGSTATUS_A}, peripherals::{self, SPI3}, spim::{self, Spim}, usb::{
         self,
-        vbus_detect::{HardwareVbusDetect, VbusDetect},
-        Driver, Instance,
+        vbus_detect::HardwareVbusDetect,
+        Driver,
     }, Peripheral
 };
-use embassy_sync::{blocking_mutex::raw::{NoopRawMutex, RawMutex}, channel::{Channel, Receiver, Sender}};
 use embassy_usb::{
-    class::cdc_acm::{CdcAcmClass, State}, driver::EndpointError, Builder, UsbDevice
+    driver::EndpointError, Builder, UsbDevice
 };
 use paj7025_nrf::Paj7025;
 use static_cell::StaticCell;
@@ -68,8 +64,6 @@ embassy_nrf::bind_interrupts!(struct Irqs {
     POWER_CLOCK => usb::vbus_detect::InterruptHandler;
     SPIM3 => spim::InterruptHandler<peripherals::SPI3>;
     SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1 => spim::InterruptHandler<peripherals::TWISPI1>;
-    SPIM2_SPIS2_SPI2 => spis::InterruptHandler<peripherals::SPI2>;
-    SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0 => spis::InterruptHandler<peripherals::TWISPI0>;
 });
 
 fn log_stuff() {
@@ -100,8 +94,7 @@ const NUM_BUFFERS: usize = 6;
 static SHARED_BUFFERS: StaticCell<[[u8; 98*98 + 98*3]; NUM_BUFFERS]> = StaticCell::new();
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
-    let shared_buffers = SHARED_BUFFERS.init_with(|| [[0; 98*98+98*3]; NUM_BUFFERS]);
+async fn main(_spawner: Spawner) {
     // enable instruction cache
     // unsafe { &*pac::NVMC::ptr() }.icachecnf.write(|w| w.cacheen().enabled());
     check_regout0();
@@ -111,17 +104,17 @@ async fn main(spawner: Spawner) {
 
     log_stuff();
 
-    let mut wide = Paj7025::new(
+    let wide = Paj7025::new(
         Spim::new(
-            &mut p.SPI3,
+            p.SPI3,
             Irqs,
-            &mut pinout!(p.wf_sck),
-            &mut pinout!(p.wf_miso),
-            &mut pinout!(p.wf_mosi),
+            pinout!(p.wf_sck),
+            pinout!(p.wf_miso),
+            pinout!(p.wf_mosi),
             Default::default(),
         ),
-        &mut pinout!(p.wf_cs),
-        &mut pinout!(p.wf_fod),
+        pinout!(p.wf_cs),
+        pinout!(p.wf_fod),
     ).await;
     let near = Paj7025::new(
         Spim::new(
@@ -136,7 +129,7 @@ async fn main(spawner: Spawner) {
         &mut pinout!(p.nf_fod),
     ).await;
     // Run the USB device.
-    let mut usb = usb_device(p.USBD);
+    let mut usb = usb_device(p.USBD, wide);
     usb.run().await;
 }
 
@@ -146,7 +139,10 @@ async fn run_usb(mut device: UsbDevice<'static, embassy_nrf::usb::Driver<'static
 }
 
 /// Panics if called more than once.
-fn usb_device(p: impl Peripheral<P = peripherals::USBD> + 'static) -> UsbDevice<'static, usb::Driver<'static, peripherals::USBD, HardwareVbusDetect>>
+fn usb_device(
+    p: impl Peripheral<P = peripherals::USBD> + 'static,
+    sensor: Paj7025<'static, SPI3>,
+) -> UsbDevice<'static, usb::Driver<'static, peripherals::USBD, HardwareVbusDetect>>
 {
     // Create the driver, from the HAL.
     let driver = Driver::new(p, Irqs, HardwareVbusDetect::new(Irqs));
@@ -166,15 +162,14 @@ fn usb_device(p: impl Peripheral<P = peripherals::USBD> + 'static) -> UsbDevice<
     static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
     static MSOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
     static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
-    static CDC_ACM_STATE: StaticCell<State> = StaticCell::new();
-    static PIXART_STATE: StaticCell<pixart::State> = StaticCell::new();
+    static PIXART_STATE: StaticCell<pixart::State<'_, SPI3>> = StaticCell::new();
 
     let device_descriptor = DEVICE_DESCRIPTOR.init_with(|| [0; 256]);
     let config_descriptor = CONFIG_DESCRIPTOR.init_with(|| [0; 256]);
     let bos_descriptor = BOS_DESCRIPTOR.init_with(|| [0; 256]);
     let msos_descriptor = MSOS_DESCRIPTOR.init_with(|| [0; 256]);
     let control_buf = CONTROL_BUF.init_with(|| [0; 64]);
-    let pixart_state = PIXART_STATE.init_with(pixart::State::new);
+    let pixart_state = PIXART_STATE.init_with(move || pixart::State::new(sensor));
 
     let mut builder = Builder::new(
         driver,

@@ -43,6 +43,33 @@ impl<'d, T: Instance> Paj7025<'d, T> {
         data[0]
     }
 
+    pub fn read_register_blocking(&mut self, address: u8) -> u8 {
+        let cmd = [1 << 7];
+        self.cs.set_low();
+        self.spim.blocking_write(&cmd).unwrap();
+        self.spim.blocking_write(&[address]).unwrap();
+        let mut data = [0];
+        self.spim.blocking_read(&mut data).unwrap();
+        self.cs.set_high();
+        data[0]
+    }
+
+    pub fn read_register_slice_blocking(&mut self, address: u8, buf: &mut [u8]) {
+        if buf.len() == 0 {
+            return;
+        } else if buf.len() == 1 {
+            buf[0] = self.read_register_blocking(address);
+            return;
+        }
+
+        let cmd = [(1 << 7) | 1];
+        self.cs.set_low();
+        self.spim.blocking_write(&cmd).unwrap();
+        self.spim.blocking_write(&[address]).unwrap();
+        self.spim.blocking_read(buf).unwrap();
+        self.cs.set_high();
+    }
+
     pub async fn read_register_array<const N: usize>(&mut self, address: u8, buf: &mut [u8; N]) {
         if N == 0 {
             return;
