@@ -20,6 +20,7 @@ cortex-m-rt = "0.7.3"
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 embedded-hal = { version = "1.0.0", features = ["defmt-03"] }
 static_cell = "2.0.0"
+paj7025-nrf = { version = "0.1.0", path = "../paj7025-nrf" }
 
 
 

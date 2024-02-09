@@ -6,7 +6,7 @@ use embassy_usb::{
     Builder,
 };
 
-use crate::paj7025::Paj7025;
+use paj7025_nrf::Paj7025;
 
 pub struct State {
     handler: ControlHandler,

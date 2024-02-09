@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-mod paj7025;
 #[macro_use]
 mod pinout;
 
@@ -21,7 +20,7 @@ use embassy_sync::{blocking_mutex::raw::{NoopRawMutex, RawMutex}, channel::{Chan
 use embassy_usb::{
     class::cdc_acm::{CdcAcmClass, State}, driver::EndpointError, Builder, UsbDevice
 };
-use paj7025::Paj7025;
+use paj7025_nrf::Paj7025;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 

@@ -1,10 +1,10 @@
+#![no_std]
+// TODO remove all the nrf52840 (and embassy?) specific stuff
 use defmt::{info, trace};
 use embassy_embedded_hal::SetConfig;
 use embassy_nrf::{
-    gpio::{AnyPin, Level, Output, OutputDrive, Pin}, interrupt::typelevel::{Binding, SPIM3, Interrupt}, pac, peripherals::SPI3, spim::{self, Config, Frequency, Instance, Spim, MODE_3, Polarity}, Peripheral, PeripheralRef
+    gpio::{AnyPin, Level, Output, OutputDrive, Pin}, pac, spim::{Config, Frequency, Instance, Spim, MODE_3}, Peripheral
 };
-
-/// PAJ7025 driver
 ///
 /// Nothing here is cancel safe, if a future is dropped, the device will be left in an
 /// indeterminate state.
@@ -117,7 +117,6 @@ impl<'d, T: Instance> Paj7025<'d, T> {
         // config.bit_order = BitOrder::LSB_FIRST;
         spim.set_config(&config).unwrap();
         regs::<T>().config.write(|w| w.order().lsb_first());
-        // unsafe { &*pac::SPIM3::ptr() }.config.write(|w| w.order().lsb_first());
         let mut paj = Self { spim, cs, fod };
         paj.initial_power().await;
         info!("Paj7025 initial power");
@@ -154,91 +153,91 @@ impl<'d, T: Instance> Paj7025<'d, T> {
         self.write_register(0x30, 0x01).await;
     }
 
-    fn initialize_settings2(&mut self) {
+    async fn initialize_settings2(&mut self) {
         let mut bank = 0x00;
-        self.write_register_blocking(0xef, bank);     //Switching RegBank to Bank0
+        self.write_register(0xef, bank).await;     //Switching RegBank to Bank0
 
         let mut tmp_data = 0x00;
-        self.write_register_blocking(0xdc, tmp_data); //internal_system_control_disable
+        self.write_register(0xdc, tmp_data).await; //internal_system_control_disable
 
         tmp_data = 0x04;
-        self.write_register_blocking(0xfb, tmp_data); //[2]LEDDAC disable
+        self.write_register(0xfb, tmp_data).await; //[2]LEDDAC disable
 
         tmp_data = 0x05;
-        self.write_register_blocking(0x2f, tmp_data); //sensor_on
+        self.write_register(0x2f, tmp_data).await; //sensor_on
 
         tmp_data = 0x00;
-        self.write_register_blocking(0x30, tmp_data); //Manual_PowerControl_Update_Req
+        self.write_register(0x30, tmp_data).await; //Manual_PowerControl_Update_Req
 
         tmp_data = 0x01;
-        self.write_register_blocking(0x30, tmp_data); //Manual_PowerControl_Update_Req
+        self.write_register(0x30, tmp_data).await; //Manual_PowerControl_Update_Req
 
         tmp_data = 0x00;
-        self.write_register_blocking(0x1f, tmp_data); //freerun_irtx_disable
+        self.write_register(0x1f, tmp_data).await; //freerun_irtx_disable
 
         bank = 0x01;
-        self.write_register_blocking(0xef, bank);     //Switching RegBank to Bank1
+        self.write_register(0xef, bank).await;     //Switching RegBank to Bank1
 
         tmp_data = 0x00;
-        self.write_register_blocking(0x2d, tmp_data); //V flip
+        self.write_register(0x2d, tmp_data).await; //V flip
 
         bank = 0x0c;
-        self.write_register_blocking(0xef, bank);     //Switching RegBank to Bank12
+        self.write_register(0xef, bank).await;     //Switching RegBank to Bank12
 
         let tmp_data_buf_xy = [(4095 & 0xff) as u8, (4095 >> 8) as u8];
-        self.write_register_array_blocking(0x60, &tmp_data_buf_xy);
-        self.write_register_array_blocking(0x62, &tmp_data_buf_xy);
+        self.write_register_array(0x60, &tmp_data_buf_xy).await;
+        self.write_register_array(0x62, &tmp_data_buf_xy).await;
 
         tmp_data = 0x00;
-        self.write_register_blocking(0x64, tmp_data); //G0 mode setting
+        self.write_register(0x64, tmp_data).await; //G0 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x65, tmp_data); //G1 mode setting
+        self.write_register(0x65, tmp_data).await; //G1 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x66, tmp_data); //G2 mode setting
+        self.write_register(0x66, tmp_data).await; //G2 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x67, tmp_data); //G3 mode setting
+        self.write_register(0x67, tmp_data).await; //G3 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x68, tmp_data); //G4 mode setting
+        self.write_register(0x68, tmp_data).await; //G4 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x69, tmp_data); //G5 mode setting
+        self.write_register(0x69, tmp_data).await; //G5 mode setting
         tmp_data = 0x07; // FOD mode
-        self.write_register_blocking(0x6a, tmp_data); //G6 mode setting
+        self.write_register(0x6a, tmp_data).await; //G6 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x6b, tmp_data); //G7 mode setting
+        self.write_register(0x6b, tmp_data).await; //G7 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x6c, tmp_data); //G8 mode setting
+        self.write_register(0x6c, tmp_data).await; //G8 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x71, tmp_data); //G13 mode setting
+        self.write_register(0x71, tmp_data).await; //G13 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x72, tmp_data); //G14 mode setting
+        self.write_register(0x72, tmp_data).await; //G14 mode setting
         tmp_data = 0x00;
-        self.write_register_blocking(0x12, tmp_data); //keyscan disable
+        self.write_register(0x12, tmp_data).await; //keyscan disable
         tmp_data = 0x00;
-        self.write_register_blocking(0x13, tmp_data); //keyscan disable
+        self.write_register(0x13, tmp_data).await; //keyscan disable
         bank = 0x00;
-        self.write_register_blocking(0xef, bank);     //Switching RegBank to Bank0
+        self.write_register(0xef, bank).await;     //Switching RegBank to Bank0
         tmp_data = 0x01;
-        self.write_register_blocking(0x01, tmp_data); //update flag enable
+        self.write_register(0x01, tmp_data).await; //update flag enable
 
         bank = 0x0c;
-        self.write_register_blocking(0xef, bank);     //Switching RegBank to Bank12
+        self.write_register(0xef, bank).await;     //Switching RegBank to Bank12
         tmp_data = 0x10;
-        self.write_register_blocking(0x0b, tmp_data); //global = 16
+        self.write_register(0x0b, tmp_data).await; //global = 16
         tmp_data = 0x03; // should be 0 for nearfield
-        self.write_register_blocking(0x0c, tmp_data); //ggh=0 total gain=2x
+        self.write_register(0x0c, tmp_data).await; //ggh=0 total gain=2x
         tmp_data = 0x00;
-        self.write_register_blocking(0x0f, tmp_data); //Texp=8192
+        self.write_register(0x0f, tmp_data).await; //Texp=8192
         tmp_data = 0x20;
-        self.write_register_blocking(0x10, tmp_data); //Texp=8192
+        self.write_register(0x10, tmp_data).await; //Texp=8192
         tmp_data = 0x00;
-        self.write_register_blocking(0x46, tmp_data); //oalb
+        self.write_register(0x46, tmp_data).await; //oalb
         tmp_data = 0x6e;
-        self.write_register_blocking(0x47, tmp_data); //Yth = 110
+        self.write_register(0x47, tmp_data).await; //Yth = 110
 
         bank = 0x01;
-        self.write_register_blocking(0xef, bank);     //Switching RegBank to Bank1
+        self.write_register(0xef, bank).await;     //Switching RegBank to Bank1
         tmp_data = 0x01;
-        self.write_register_blocking(0x01, tmp_data); //update flag enable
+        self.write_register(0x01, tmp_data).await; //update flag enable
     }
     async fn initialize_settings(&mut self) {
         self.write_register(0xEF, 0x00).await;
@@ -306,122 +305,6 @@ impl<'d, T: Instance> Paj7025<'d, T> {
         self.write_register(0xef, 0x00).await;
         self.write_register(0x01, 0x01).await;
     }
-}
-
-/// PAJ7025 image mode driver
-///
-/// Nothing here is cancel safe, if a future is dropped, the device will be left in an
-/// indeterminate state.
-pub struct Paj7025ImageMode<'d, P: Pin> {
-    spim: Spim<'d, SPI3>,
-    cs: Output<'d, P>,
-}
-
-// impl<'d, P: Pin> Paj7025ImageMode<'d, P> {
-    pub fn image_mode_spim<'d>(
-        spim: impl Peripheral<P = SPI3> + 'd,
-        _irq: impl Binding<SPIM3, spim::InterruptHandler<SPI3>> + 'd,
-        input: impl Peripheral<P = impl Pin> + 'd,
-        // cs: impl Peripheral<P = P> + 'd,
-    ) -> Spim<'d, SPI3> {
-        let mut config = Config::default();
-        config.frequency = Frequency::M32;
-        config.mode = MODE_3;
-        let spim = manifest_spim_driver(spim, None, Some(input.into_ref().map_into()), None, config);
-        spim
-    }
-// }
-
-/// Manifests the Spim driver out of thin air
-///
-/// Copy-paste of Spim::new_inner which is private.
-fn manifest_spim_driver<'d>(
-    _spim: impl Peripheral<P = SPI3> + 'd,
-    sck: Option<PeripheralRef<'d, AnyPin>>,
-    miso: Option<PeripheralRef<'d, AnyPin>>,
-    mosi: Option<PeripheralRef<'d, AnyPin>>,
-    config: Config,
-) -> Spim<'d, SPI3> {
-    let r = regs::<SPI3>();
-
-    // Configure pins
-    if let Some(sck) = &sck {
-        conf(&**sck).write(|w| w.dir().output().drive().h0h1());
-    }
-    if let Some(mosi) = &mosi {
-        conf(&**mosi).write(|w| w.dir().output().drive().h0h1());
-    }
-    if let Some(miso) = &miso {
-        conf(&**miso).write(|w| w.input().connect().drive().h0h1());
-    }
-
-    match config.mode.polarity {
-        Polarity::IdleHigh => {
-            if let Some(sck) = &sck {
-                set_high(&**sck);
-            }
-            if let Some(mosi) = &mosi {
-                set_high(&**mosi);
-            }
-        }
-        Polarity::IdleLow => {
-            if let Some(sck) = &sck {
-                set_low(&**sck);
-            }
-            if let Some(mosi) = &mosi {
-                set_low(&**mosi);
-            }
-        }
-    }
-
-    // Select pins.
-    r.psel.sck.write(|w| unsafe { w.bits(sck.psel_bits()) });
-    r.psel.mosi.write(|w| unsafe { w.bits(mosi.psel_bits()) });
-    r.psel.miso.write(|w| unsafe { w.bits(miso.psel_bits()) });
-
-    // Enable SPIM instance.
-    r.enable.write(|w| w.enable().enabled());
-
-    let mut spim: Spim<'_, SPI3> = unsafe { core::mem::transmute(()) };
-
-    // Apply runtime peripheral configuration
-    spim.set_config(&config).unwrap();
-
-    // Disable all events interrupts
-    r.intenclr.write(|w| unsafe { w.bits(0xFFFF_FFFF) });
-
-    <SPI3 as Instance>::Interrupt::unpend();
-    unsafe { <SPI3 as Instance>::Interrupt::enable() };
-
-    spim
-}
-
-trait PselBits {
-    fn psel_bits(&self) -> u32;
-}
-
-impl<'a, P: Pin> PselBits for Option<PeripheralRef<'a, P>> {
-    #[inline]
-    fn psel_bits(&self) -> u32 {
-        match self {
-            Some(pin) => pin.psel_bits(),
-            None => 1u32 << 31,
-        }
-    }
-}
-
-// hack to access sealed trait methods
-// seriously though, wtf?
-fn conf<P: Pin>(p: &P) -> &pac::p0::PIN_CNF {
-    p.conf()
-}
-
-fn set_high<P: Pin>(p: &P) {
-    p.set_high()
-}
-
-fn set_low<P: Pin>(p: &P) {
-    p.set_low()
 }
 
 fn regs<I: Instance>() -> &'static pac::spim0::RegisterBlock {
