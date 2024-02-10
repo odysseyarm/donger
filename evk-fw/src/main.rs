@@ -7,6 +7,7 @@ mod pixart;
 
 use defmt::{info, Debug2Format};
 use embassy_executor::Spawner;
+use embassy_futures::join::join;
 use embassy_nrf::{
     config::{Config, HfclkSource}, pac::{self, power::mainregstatus::MAINREGSTATUS_A}, peripherals::{self, SPI3}, spim::{self, Spim}, usb::{
         self,
@@ -129,8 +130,8 @@ async fn main(_spawner: Spawner) {
         &mut pinout!(p.nf_fod),
     ).await;
     // Run the USB device.
-    let mut usb = usb_device(p.USBD, wide);
-    usb.run().await;
+    let (mut class, mut usb) = usb_device(p.USBD, wide);
+    join(usb.run(), class.run()).await;
 }
 
 #[embassy_executor::task]
@@ -142,7 +143,10 @@ async fn run_usb(mut device: UsbDevice<'static, embassy_nrf::usb::Driver<'static
 fn usb_device(
     p: impl Peripheral<P = peripherals::USBD> + 'static,
     sensor: Paj7025<'static, SPI3>,
-) -> UsbDevice<'static, usb::Driver<'static, peripherals::USBD, HardwareVbusDetect>>
+) -> (
+    PixartClass<'static, impl embassy_usb::driver::Driver<'static>, SPI3>,
+    UsbDevice<'static, usb::Driver<'static, peripherals::USBD, HardwareVbusDetect>>,
+)
 {
     // Create the driver, from the HAL.
     let driver = Driver::new(p, Irqs, HardwareVbusDetect::new(Irqs));
@@ -182,11 +186,11 @@ fn usb_device(
     );
 
     // Create classes on the builder.
-    PixartClass::new(&mut builder, pixart_state);
+    let class = PixartClass::new(&mut builder, pixart_state);
 
     // Build the builder.
     let usb = builder.build();
-    usb
+    (class, usb)
 }
 
 struct Disconnected {}
