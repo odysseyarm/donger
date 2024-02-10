@@ -1,15 +1,12 @@
 use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    fs::File, io::BufWriter, sync::{Arc, Mutex}, time::{Duration, Instant}
 };
 
 use ggez::{
-    conf::{WindowMode, WindowSetup},
-    event,
-    glam::*,
-    graphics::{self, Color, DrawParam, ImageFormat, Sampler, Transform},
-    Context, GameResult,
+    conf::{WindowMode, WindowSetup}, event, glam::*, graphics::{self, Color, DrawParam, ImageFormat, Sampler, Transform}, Context, GameResult,
+    input::keyboard::KeyCode,
 };
+use image::{codecs::png::PngEncoder, ColorType, ImageBuffer, ImageEncoder, Luma};
 use mot_data::MotData;
 use serialport::{ClearBuffer, SerialPort};
 
@@ -33,6 +30,7 @@ struct MainState {
     wf_data: Arc<Mutex<PajData>>,
     nf_data: Arc<Mutex<PajData>>,
     circle: ggez::graphics::Mesh,
+    capture_count: usize,
 }
 
 impl MainState {
@@ -53,6 +51,7 @@ impl MainState {
             wf_data: wf_data.clone(),
             nf_data: nf_data.clone(),
             circle,
+            capture_count: 0,
         };
         std::thread::spawn(move || {
             reader_thread("/dev/ttyACM1".into(), wf_data, nf_data);
@@ -138,6 +137,32 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
         canvas.finish(ctx)?;
 
+        Ok(())
+    }
+
+    fn key_down_event(
+        &mut self,
+        ctx: &mut Context,
+        input: ggez::input::keyboard::KeyInput,
+        repeated: bool,
+    ) -> Result<(), ggez::GameError> {
+        if repeated {
+            return Ok(());
+        }
+        match input.keycode {
+            Some(KeyCode::Escape) => ctx.request_quit(),
+            Some(KeyCode::Space) => {
+                // capture and save image
+                let wf_data = self.wf_data.lock().unwrap();
+                PngEncoder::new(BufWriter::new(File::create(format!("widefield_{:02}.png", self.capture_count)).unwrap())).write_image(&wf_data.image, 98, 98, ColorType::Rgba8).unwrap();
+                drop(wf_data);
+                let nf_data = self.nf_data.lock().unwrap();
+                PngEncoder::new(BufWriter::new(File::create(format!("nearfield_{:02}.png", self.capture_count)).unwrap())).write_image(&nf_data.image, 98, 98, ColorType::Rgba8).unwrap();
+                println!("image captured");
+                self.capture_count += 1;
+            }
+            _ => (),
+        }
         Ok(())
     }
 }

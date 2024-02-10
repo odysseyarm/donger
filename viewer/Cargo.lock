@@ -2470,6 +2470,7 @@ name = "viewer"
 version = "0.1.0"
 dependencies = [
  "ggez",
+ "image",
  "serialport",
 ]
 
