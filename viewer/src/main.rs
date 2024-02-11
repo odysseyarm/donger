@@ -1,5 +1,5 @@
 use std::{
-    fs::File, io::BufWriter, sync::{Arc, Mutex}, time::{Duration, Instant}
+    fs::File, io::BufWriter, path::Path, sync::{Arc, Mutex}, time::{Duration, Instant}
 };
 
 use ggez::{
@@ -34,7 +34,7 @@ struct MainState {
 }
 
 impl MainState {
-    fn new(ctx: &mut Context) -> GameResult<MainState> {
+    fn new(ctx: &mut Context, capture_count: usize) -> GameResult<MainState> {
         let circle = graphics::Mesh::new_circle(
             ctx,
             graphics::DrawMode::fill(),
@@ -51,7 +51,7 @@ impl MainState {
             wf_data: wf_data.clone(),
             nf_data: nf_data.clone(),
             circle,
-            capture_count: 0,
+            capture_count,
         };
         std::thread::spawn(move || {
             reader_thread("/dev/ttyACM1".into(), wf_data, nf_data);
@@ -156,9 +156,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 let wf_data = self.wf_data.lock().unwrap();
                 PngEncoder::new(BufWriter::new(File::create(format!("widefield_{:02}.png", self.capture_count)).unwrap())).write_image(&wf_data.image, 98, 98, ColorType::Rgba8).unwrap();
                 drop(wf_data);
+                println!("Saved widefield_{:02}.png", self.capture_count);
                 let nf_data = self.nf_data.lock().unwrap();
                 PngEncoder::new(BufWriter::new(File::create(format!("nearfield_{:02}.png", self.capture_count)).unwrap())).write_image(&nf_data.image, 98, 98, ColorType::Rgba8).unwrap();
-                println!("image captured");
+                println!("Saved nearfield_{:02}.png", self.capture_count);
                 self.capture_count += 1;
             }
             _ => (),
@@ -168,6 +169,16 @@ impl event::EventHandler<ggez::GameError> for MainState {
 }
 
 pub fn main() -> GameResult {
+    let capture_count = {
+        let mut i = 0;
+        loop {
+            let path = format!("nearfield_{:02}.png", i);
+            if !Path::new(&path).exists() {
+                break i;
+            }
+            i += 1;
+        }
+    };
     let cb = ggez::ContextBuilder::new("super_simple", "ggez")
         .window_setup(WindowSetup {
             title: "donger viewer".into(),
@@ -179,7 +190,7 @@ pub fn main() -> GameResult {
             ..Default::default()
         });
     let (mut ctx, event_loop) = cb.build()?;
-    let state = MainState::new(&mut ctx)?;
+    let state = MainState::new(&mut ctx, capture_count)?;
     event::run(ctx, event_loop, state)
 }
 
@@ -226,7 +237,7 @@ fn reader_thread(
         drop(paj_data);
         avg = avg / 2. + time.elapsed().as_secs_f64() / 2.;
         time = Instant::now();
-        println!("{id} {len}, {:.4}/s", 1. / avg);
+        // println!("{id} {len}, {:.4}/s", 1. / avg);
     }
 }
 

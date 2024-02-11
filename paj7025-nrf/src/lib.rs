@@ -180,7 +180,7 @@ impl<'d, T: Instance> Paj7025<'d, T> {
         self.write_register(0x30, 0x01).await;
     }
 
-    async fn initialize_settings2(&mut self) {
+    pub async fn initialize_settings2(&mut self) {
         let mut bank = 0x00;
         self.write_register(0xef, bank).await;     //Switching RegBank to Bank0
 
