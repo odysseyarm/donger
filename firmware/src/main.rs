@@ -24,6 +24,24 @@ use paj7025_nrf::Paj7025;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
+#[link_section = ".ramtextload"]
+#[cortex_m_rt::pre_init]
+unsafe fn init_ramtext() {
+    core::arch::asm!(
+    // Initialise .data memory. `__sdata`, `__sidata`, and `__edata` come from the linker script.
+    "ldr r0, =__sramtext
+     ldr r1, =__eramtext
+     ldr r2, =__siramtext
+     2:
+     cmp r1, r0
+     beq 3f
+     ldm r2!, {{r3}}
+     stm r0!, {{r3}}
+     b 2b
+     3:"
+    );
+}
+
 // this could go in pre_init, but it already works so /shrug
 fn check_regout0() {
     // if the ats_mot_nrf52840 board is powered from USB
@@ -70,6 +88,8 @@ embassy_nrf::bind_interrupts!(struct Irqs {
 });
 
 fn log_stuff() {
+    let pc = cortex_m::register::pc::read();
+    info!("Hello from {:010x}", pc);
     let mainregstatus = unsafe { &*pac::POWER::ptr() }
         .mainregstatus
         .read()
