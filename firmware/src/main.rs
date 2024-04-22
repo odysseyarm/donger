@@ -151,14 +151,17 @@ async fn main(spawner: Spawner) {
         &mut pinout!(p.nf_fod),
     ).await;
 
-    wide.set_gain_1(16).await;
-    wide.set_gain_2(3).await;
-    wide.set_frame_period(400000).await;
-    wide.set_exposure_time(65535).await;
-    near.set_gain_1(16).await;
+    // wide.set_gain_1(16).await;
+    // wide.set_gain_2(3).await;
+    // wide.set_frame_period(400000).await;
+    wide.set_exposure_time(46625).await;
+    wide.set_bank1_sync_updated(1).await;
+    near.set_gain_1(0).await;
     near.set_gain_2(3).await;
-    near.set_frame_period(400000).await;
-    near.set_exposure_time(65535).await;
+    // near.set_frame_period(400000).await;
+    near.set_exposure_time(46625).await;
+    near.set_bank1_sync_updated(1).await;
+    embassy_time::Timer::after_millis(100).await;
 
     info!("wide.exposure_time = {}", wide.exposure_time().await);
     info!("wide.frame_period = {}", wide.frame_period().await);
@@ -370,29 +373,5 @@ impl From<EndpointError> for Disconnected {
             EndpointError::BufferOverflow => panic!("Buffer overflow"),
             EndpointError::Disabled => Disconnected {},
         }
-    }
-}
-
-// #[embassy_executor::main]
-async fn _blinky(_spawner: Spawner) {
-    let p = embassy_nrf::init(Default::default());
-    let mut led1 = Output::new(p.P0_06, Level::Low, OutputDrive::Standard);
-    let blue_led = Output::new(p.P0_12, Level::Low, OutputDrive::Standard);
-    let button = Input::new(p.P1_06, Pull::Up);
-    let button_ch = InputChannel::new(p.GPIOTE_CH0, button, InputChannelPolarity::HiToLo);
-    let led_ch = OutputChannel::new(p.GPIOTE_CH1, blue_led, OutputChannelPolarity::Toggle);
-    let mut ppi_ch = Ppi::new_one_to_one(p.PPI_CH0, button_ch.event_in(), led_ch.task_out());
-    ppi_ch.enable();
-
-    loop {
-        embassy_time::Timer::after_secs(1).await;
-        led1.set_high();
-        embassy_time::Timer::after_secs(1).await;
-        led1.set_low();
-        // led.set_high();
-        // button.wait_for_low().await;
-        // info!("button pressed");
-        // led.set_low();
-        // button.wait_for_high().await;
     }
 }
