@@ -3,14 +3,14 @@ use std::{
 };
 
 use ggez::{
-    conf::{WindowMode, WindowSetup}, event, glam::*, graphics::{self, Color, DrawParam, ImageFormat, Sampler, Transform}, Context, GameResult,
-    input::keyboard::KeyCode,
+    conf::{WindowMode, WindowSetup}, event, glam::*, graphics::{self, Color, DrawParam, ImageFormat, Sampler, Text, Transform}, input::{keyboard::KeyCode, mouse::{cursor_grabbed, set_cursor_grabbed, set_position}}, Context, GameResult
 };
 use image::{codecs::png::PngEncoder, ColorType, ImageBuffer, ImageEncoder, Luma};
 use mot_data::MotData;
 use serialport::{ClearBuffer, SerialPort};
 
 mod mot_data;
+mod cv;
 
 struct PajData {
     image: [u8; 98 * 98 * 4],
@@ -39,7 +39,7 @@ impl MainState {
             ctx,
             graphics::DrawMode::fill(),
             vec2(0., 0.),
-            10.0,
+            4.0,
             2.0,
             Color::RED,
         )?;
@@ -53,8 +53,9 @@ impl MainState {
             circle,
             capture_count,
         };
+        let path = std::env::args().nth(1).unwrap_or("/dev/ttyACM1".into());
         std::thread::spawn(move || {
-            reader_thread("/dev/ttyACM1".into(), wf_data, nf_data);
+            reader_thread(path, wf_data, nf_data);
         });
         Ok(main_state)
     }
@@ -222,8 +223,10 @@ fn reader_thread(
             shiftr(&mut buf, 3);
         }
         let mut paj_data = if id == 0 {
+            cv::process_image("wf", &buf[..98*98], 98, 98);
             wf_data.lock().unwrap()
         } else {
+            cv::process_image("nf", &buf[..98*98], 98, 98);
             nf_data.lock().unwrap()
         };
         for i in 0..98 * 98 {
@@ -235,9 +238,9 @@ fn reader_thread(
             paj_data.mot_data[i] = MotData::parse(&mut raw_mot);
         }
         drop(paj_data);
-        avg = avg / 2. + time.elapsed().as_secs_f64() / 2.;
+        avg = avg * 7. / 8. + time.elapsed().as_secs_f64() / 8.;
         time = Instant::now();
-        // println!("{id} {len}, {:.4}/s", 1. / avg);
+        println!("{id} {len}, {:.4}/s", 1. / avg);
     }
 }
 

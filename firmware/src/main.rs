@@ -138,7 +138,7 @@ async fn main(spawner: Spawner) {
         &mut pinout!(p.wf_cs),
         &mut pinout!(p.wf_fod),
     ).await;
-    let near = Paj7025::new(
+    let mut near = Paj7025::new(
         Spim::new(
             &mut p.TWISPI1,
             Irqs,
@@ -150,6 +150,20 @@ async fn main(spawner: Spawner) {
         &mut pinout!(p.nf_cs),
         &mut pinout!(p.nf_fod),
     ).await;
+
+    wide.set_gain_1(16).await;
+    wide.set_gain_2(3).await;
+    wide.set_frame_period(400000).await;
+    wide.set_exposure_time(65535).await;
+    near.set_gain_1(16).await;
+    near.set_gain_2(3).await;
+    near.set_frame_period(400000).await;
+    near.set_exposure_time(65535).await;
+
+    info!("wide.exposure_time = {}", wide.exposure_time().await);
+    info!("wide.frame_period = {}", wide.frame_period().await);
+    info!("near.exposure_time = {}", near.exposure_time().await);
+    info!("near.frame_period = {}", near.frame_period().await);
     // Run the USB device.
     let (mut class, usb) = usb_device(p.USBD);
     spawner.must_spawn(run_usb(usb));
@@ -223,7 +237,6 @@ async fn main(spawner: Spawner) {
             let buf = if let Ok(b) = image_buffers.try_receive() {
                 b
             } else {
-                info!("usb feed is starved D:");
                 image_buffers.receive().await
             };
             let id = buf[buf.len()-3];
@@ -252,7 +265,6 @@ where
         let buffer = if let Ok(b) = free_buffers.try_receive() {
             b
         } else {
-            info!("paj is starved D:");
             free_buffers.receive().await
         };
         let result = spis.read(buffer).await;

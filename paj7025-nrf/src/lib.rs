@@ -334,6 +334,63 @@ impl<'d, T: Instance> Paj7025<'d, T> {
     }
 }
 
+macro_rules! read_register_spec {
+    ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
+        pub async fn $name(&mut self) -> $ty {
+            self.write_register(0xef, $bank).await;
+            let mut bytes = <$ty>::to_le_bytes(0);
+            for (byte, addr) in ::core::iter::zip(&mut bytes, [$($addr),*]) {
+                *byte = self.read_register(addr).await;
+            }
+            <$ty>::from_le_bytes(bytes)
+        }
+    }
+}
+
+macro_rules! write_register_spec {
+    ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
+        pub async fn $name(&mut self, value: $ty) {
+            self.write_register(0xef, $bank).await;
+            let bytes = <$ty>::to_le_bytes(value);
+            for (byte, addr) in ::core::iter::zip(bytes, [$($addr),*]) {
+                self.write_register(addr, byte).await;
+            }
+        }
+    }
+}
+
+impl<'d, T: Instance> Paj7025<'d, T> {
+    read_register_spec!(product_id: u16 = 0x00; [0x02, 0x03]);
+    read_register_spec!(resolution_x: u16 = 0x0c; [0x60, 0x61]);
+    read_register_spec!(resolution_y: u16 = 0x0c; [0x62, 0x63]);
+    write_register_spec!(set_resolution_x: u16 = 0x0c; [0x60, 0x61]);
+    write_register_spec!(set_resolution_y: u16 = 0x0c; [0x62, 0x63]);
+    read_register_spec!(gain_1: u8 = 0x01; [0x05]); // B_global
+    read_register_spec!(gain_2: u8 = 0x01; [0x06]); // B_ggh
+    write_register_spec!(set_gain_1: u8 = 0x0c; [0x0b]); // B_global
+    write_register_spec!(set_gain_2: u8 = 0x0c; [0x0c]); // B_ggh
+    read_register_spec!(exposure_time: u16 = 0x01; [0x0e, 0x0f]);
+    write_register_spec!(set_exposure_time: u16 = 0x0c; [0x0f, 0x10]);
+    read_register_spec!(brightness_threshold: u8 = 0x0c; [0x47]);
+    write_register_spec!(set_brightness_threshold: u8 = 0x0c; [0x47]);
+    read_register_spec!(noise_threshold: u8 = 0x00; [0x0f]);
+    write_register_spec!(set_noise_threshold: u8 = 0x00; [0x0f]);
+    read_register_spec!(area_threshold_max: u16 = 0x00; [0x0b, 0x0c]);
+    write_register_spec!(set_area_threshold_max: u16 = 0x00; [0x0b, 0x0c]);
+    read_register_spec!(area_threshold_min: u8 = 0x0c; [0x46]);
+    write_register_spec!(set_area_threshold_min: u8 = 0x0c; [0x46]);
+    read_register_spec!(operation_mode: u8 = 0x00; [0x12]);
+    write_register_spec!(set_operation_mode: u8 = 0x00; [0x12]);
+    read_register_spec!(max_object_cnt: u8 = 0x00; [0x19]);
+    write_register_spec!(set_max_object_cnt: u8 = 0x00; [0x19]);
+    read_register_spec!(frame_subtraction: u8 = 0x00; [0x28]);
+    write_register_spec!(set_frame_subtraction: u8 = 0x00; [0x28]);
+    read_register_spec!(frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
+    write_register_spec!(set_frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
+    write_register_spec!(set_bank1_sync_updated: u8 = 0x01; [0x01]);
+    write_register_spec!(set_bank0_sync_updated: u8 = 0x00; [0x01]);
+}
+
 fn regs<I: Instance>() -> &'static pac::spim0::RegisterBlock {
     I::regs()
 }

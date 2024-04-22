@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 ggez = "0.9.3"
 image = { version = "0.24.8", default-features = false, features = ["png"] }
+opencv = "0.91.1"
 serialport = { version = "4.3.0", features = ["usbportinfo-interface"] }
