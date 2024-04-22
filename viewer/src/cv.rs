@@ -42,10 +42,10 @@ pub fn process_image(name: &str, image: &[u8], w: i32, h: i32) {
     let mut marker_corners = Vector::<Vector<Point2f>>::default();
     let mut marker_ids = Vector::<i32>::default();
 
-    // let new_size = Size::new(273, 273);
-    // let mut flipped_resized = Mat::default();
-    // resize(&im, &mut flipped_resized, new_size, 0.0, 0.0, INTER_CUBIC).unwrap();
-    let flipped_resized = im;
+    let new_size = Size::new(273, 273);
+    let mut flipped_resized = Mat::default();
+    resize(&im, &mut flipped_resized, new_size, 0.0, 0.0, INTER_CUBIC).unwrap();
+    // let flipped_resized = im;
     let mut resized = Mat::default();
     flip(&flipped_resized, &mut resized, 0).unwrap();
     if name == "wf" {
@@ -84,6 +84,15 @@ pub fn process_image(name: &str, image: &[u8], w: i32, h: i32) {
 
     let mut im_copy = Mat::default();
     cvt_color(&resized, &mut im_copy, COLOR_GRAY2BGR, 0).unwrap();
+    let tmp = im_copy;
+    let mut im_copy = Mat::default();
+    resize(&tmp, &mut im_copy, Size::new(512, 512), 0., 0., INTER_CUBIC).unwrap();
+    charuco_corners.as_mut_slice().iter_mut().for_each(|x| *x *= 512.0 / new_size.width as f32);
+    marker_corners = marker_corners.iter().map(|mut v| {
+        v.as_mut_slice().iter_mut().for_each(|x| *x *= 512.0 / new_size.height as f32);
+        v
+    }).collect();
+
     if marker_ids.len() > 0 {
         println!("MARKERS");
         draw_detected_markers(

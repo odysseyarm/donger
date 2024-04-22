@@ -119,6 +119,19 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 ..Default::default()
             },
         );
+        // canvas.draw(&Text::new(format!("hello")), DrawParam {
+        //     color: Color::WHITE,
+        //     transform: Transform::Matrix(
+        //         [
+        //             [1., 0., 0., 0.],
+        //             [0., 1., 0., 0.],
+        //             [0., 0., 1., 0.],
+        //             [700., 7. * 98., 0., 1.],
+        //         ]
+        //         .into(),
+        //     ),
+        //     ..Default::default()
+        // });
 
         for mot_data in &wf_data.mot_data {
             if mot_data.area > 0 {
@@ -164,6 +177,48 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 self.capture_count += 1;
             }
             _ => (),
+        }
+        Ok(())
+    }
+
+    fn mouse_button_down_event(
+            &mut self,
+            ctx: &mut Context,
+            button: event::MouseButton,
+            _x: f32,
+            _y: f32,
+        ) -> Result<(), ggez::GameError> {
+        match button {
+            event::MouseButton::Left => set_cursor_grabbed(ctx, true),
+            _ => Ok(()),
+        }
+    }
+
+    fn mouse_button_up_event(
+            &mut self,
+            ctx: &mut Context,
+            button: event::MouseButton,
+            _x: f32,
+            _y: f32,
+        ) -> Result<(), ggez::GameError> {
+        match button {
+            event::MouseButton::Left => set_cursor_grabbed(ctx, false),
+            _ => Ok(()),
+        }
+    }
+
+    fn mouse_motion_event(
+            &mut self,
+            ctx: &mut Context,
+            x: f32,
+            y: f32,
+            dx: f32,
+            dy: f32,
+        ) -> Result<(), ggez::GameError> {
+        if cursor_grabbed(ctx) {
+            let res = ctx.gfx.drawable_size();
+            let scale = ctx.gfx.window().scale_factor() as f32;
+            set_position(ctx, Vec2::new(700., 350.) / scale)?;
         }
         Ok(())
     }
