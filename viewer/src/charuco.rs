@@ -11,8 +11,8 @@ use opencv::{
 
 pub fn process_image(name: &str, image: &[u8], w: i32, h: i32) {
     let im = Mat::new_rows_cols_with_data(h as i32, w as i32, image).unwrap();
-    let squares_x = 4;
-    let squares_y = 6;
+    let squares_x = 2;
+    let squares_y = 2;
     let square_length = 1.0;
     let marker_length = 0.8 * square_length;
     let board = CharucoBoard::new(
@@ -42,10 +42,11 @@ pub fn process_image(name: &str, image: &[u8], w: i32, h: i32) {
     let mut marker_corners = Vector::<Vector<Point2f>>::default();
     let mut marker_ids = Vector::<i32>::default();
 
-    let new_size = Size::new(273, 273);
-    let mut flipped_resized = Mat::default();
-    resize(&im, &mut flipped_resized, new_size, 0.0, 0.0, INTER_CUBIC).unwrap();
-    // let flipped_resized = im;
+    let new_size = Size::new(98, 98);
+    // let new_size = Size::new(273, 273);
+    // let mut flipped_resized = Mat::default();
+    // resize(&im, &mut flipped_resized, new_size, 0.0, 0.0, INTER_CUBIC).unwrap();
+    let flipped_resized = im;
     let mut resized = Mat::default();
     flip(&flipped_resized, &mut resized, 0).unwrap();
     if name == "wf" {
@@ -62,13 +63,13 @@ pub fn process_image(name: &str, image: &[u8], w: i32, h: i32) {
             &mut marker_ids,
         )
         .unwrap();
-    // if charuco_corners.len() > 0 {
-    //     corner_sub_pix(&resized, &mut charuco_corners, (2, 2).into(), (-1, -1).into(), opencv::core::TermCriteria {
-    //         typ: TermCriteria_EPS + TermCriteria_MAX_ITER,
-    //         max_count: 30,
-    //         epsilon: 0.001,
-    //     }).unwrap();
-    // }
+    if charuco_corners.len() > 0 {
+        corner_sub_pix(&resized, &mut charuco_corners, (5, 5).into(), (-1, -1).into(), opencv::core::TermCriteria {
+            typ: TermCriteria_EPS + TermCriteria_MAX_ITER,
+            max_count: 30,
+            epsilon: 0.001,
+        }).unwrap();
+    }
     //
     // if marker_corners.len() > 0 {
     //     let mut marker_corners_flat = marker_corners.iter().flatten().collect::<Vector<Point2f>>();
@@ -94,7 +95,6 @@ pub fn process_image(name: &str, image: &[u8], w: i32, h: i32) {
     }).collect();
 
     if marker_ids.len() > 0 {
-        println!("MARKERS");
         draw_detected_markers(
             &mut im_copy,
             &marker_corners,
@@ -105,7 +105,6 @@ pub fn process_image(name: &str, image: &[u8], w: i32, h: i32) {
     }
 
     if charuco_ids.len() > 0 {
-        println!("CHARUCO");
         draw_detected_corners_charuco(
             &mut im_copy,
             &charuco_corners,

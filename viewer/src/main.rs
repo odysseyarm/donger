@@ -10,7 +10,7 @@ use mot_data::MotData;
 use serialport::{ClearBuffer, SerialPort};
 
 mod mot_data;
-mod cv;
+mod charuco;
 
 struct PajData {
     image: [u8; 98 * 98 * 4],
@@ -278,10 +278,10 @@ fn reader_thread(
             shiftr(&mut buf, 3);
         }
         let mut paj_data = if id == 0 {
-            cv::process_image("wf", &buf[..98*98], 98, 98);
+            charuco::process_image("wf", &buf[..98*98], 98, 98);
             wf_data.lock().unwrap()
         } else {
-            cv::process_image("nf", &buf[..98*98], 98, 98);
+            charuco::process_image("nf", &buf[..98*98], 98, 98);
             nf_data.lock().unwrap()
         };
         for i in 0..98 * 98 {
