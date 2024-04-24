@@ -151,8 +151,8 @@ async fn main(spawner: Spawner) {
         &mut pinout!(p.nf_fod),
     ).await;
 
-    // wide.set_gain_1(16).await;
-    // wide.set_gain_2(3).await;
+    wide.set_gain_1(0).await;
+    wide.set_gain_2(3).await;
     // wide.set_frame_period(400000).await;
     wide.set_exposure_time(46625).await;
     wide.set_bank1_sync_updated(1).await;

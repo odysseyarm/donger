@@ -1,11 +1,11 @@
 use std::{
-    fs::File, io::BufWriter, path::Path, sync::{Arc, Mutex}, time::{Duration, Instant}
+    fs::File, io::BufWriter, path::Path, sync::{mpsc::{Receiver, SyncSender}, Arc, Mutex}, time::{Duration, Instant}
 };
 
 use ggez::{
     conf::{WindowMode, WindowSetup}, event, glam::*, graphics::{self, Color, DrawParam, ImageFormat, Sampler, Text, Transform}, input::{keyboard::KeyCode, mouse::{cursor_grabbed, set_cursor_grabbed, set_position}}, Context, GameResult
 };
-use image::{codecs::png::PngEncoder, ColorType, ImageBuffer, ImageEncoder, Luma};
+use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 use mot_data::MotData;
 use serialport::{ClearBuffer, SerialPort};
 
@@ -13,16 +13,28 @@ mod mot_data;
 mod charuco;
 mod chessboard;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Port {
+    Wf,
+    Nf,
+}
+
 struct PajData {
     image: [u8; 98 * 98 * 4],
+    gray: [u8; 98 * 98],
     mot_data: [MotData; 16],
+    avg_frame_period: f64,
+    last_frame: Instant,
 }
 
 impl Default for PajData {
     fn default() -> Self {
         Self {
             image: [255; 98*98*4],
+            gray: [255; 98*98],
             mot_data: Default::default(),
+            avg_frame_period: 1.0,
+            last_frame: Instant::now(),
         }
     }
 }
@@ -32,6 +44,8 @@ struct MainState {
     nf_data: Arc<Mutex<PajData>>,
     circle: ggez::graphics::Mesh,
     capture_count: usize,
+    captured_nf: Vec<[u8; 98 * 98]>,
+    captured_wf: Vec<[u8; 98 * 98]>,
 }
 
 impl MainState {
@@ -45,19 +59,22 @@ impl MainState {
             Color::RED,
         )?;
 
-        // Ok(MainState { pos_x: 0.0, circle })
         let wf_data = Arc::new(Mutex::new(Default::default()));
         let nf_data = Arc::new(Mutex::new(Default::default()));
+        let img_channel = std::sync::mpsc::sync_channel(2);
         let main_state = MainState {
             wf_data: wf_data.clone(),
             nf_data: nf_data.clone(),
             circle,
             capture_count,
+            captured_nf: vec![],
+            captured_wf: vec![],
         };
         let path = std::env::args().nth(1).unwrap_or("/dev/ttyACM1".into());
         std::thread::spawn(move || {
-            reader_thread(path, wf_data, nf_data);
+            reader_thread(path, wf_data, nf_data, img_channel.0);
         });
+        std::thread::spawn(move || opencv_thread(img_channel.1));
         Ok(main_state)
     }
 }
@@ -120,19 +137,45 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 ..Default::default()
             },
         );
-        // canvas.draw(&Text::new(format!("hello")), DrawParam {
-        //     color: Color::WHITE,
-        //     transform: Transform::Matrix(
-        //         [
-        //             [1., 0., 0., 0.],
-        //             [0., 1., 0., 0.],
-        //             [0., 0., 1., 0.],
-        //             [700., 7. * 98., 0., 1.],
-        //         ]
-        //         .into(),
-        //     ),
-        //     ..Default::default()
-        // });
+        canvas.draw(&Text::new(format!("{:.1} fps", 1. / nf_data.avg_frame_period)), DrawParam {
+            color: Color::WHITE,
+            transform: Transform::Matrix(
+                [
+                    [1., 0., 0., 0.],
+                    [0., 1., 0., 0.],
+                    [0., 0., 1., 0.],
+                    [700., 7. * 98., 0., 1.],
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        canvas.draw(&Text::new(format!("{:.1} fps", 1. / nf_data.avg_frame_period)), DrawParam {
+            color: Color::WHITE,
+            transform: Transform::Matrix(
+                [
+                    [1., 0., 0., 0.],
+                    [0., 1., 0., 0.],
+                    [0., 0., 1., 0.],
+                    [0., 7. * 98., 0., 1.],
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        canvas.draw(&Text::new(format!("Captured {} images", self.captured_wf.len())), DrawParam {
+            color: Color::WHITE,
+            transform: Transform::Matrix(
+                [
+                    [1., 0., 0., 0.],
+                    [0., 1., 0., 0.],
+                    [0., 0., 1., 0.],
+                    [0., 7. * 98. + 16., 0., 1.],
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
 
         for mot_data in &wf_data.mot_data {
             if mot_data.area > 0 {
@@ -169,11 +212,13 @@ impl event::EventHandler<ggez::GameError> for MainState {
             Some(KeyCode::Space) => {
                 // capture and save image
                 let wf_data = self.wf_data.lock().unwrap();
-                PngEncoder::new(BufWriter::new(File::create(format!("widefield_{:02}.png", self.capture_count)).unwrap())).write_image(&wf_data.image, 98, 98, ColorType::Rgba8).unwrap();
+                PngEncoder::new(BufWriter::new(File::create(format!("widefield_{:02}.png", self.capture_count)).unwrap())).write_image(&wf_data.gray, 98, 98, ColorType::L8).unwrap();
+                self.captured_wf.push(wf_data.gray);
                 drop(wf_data);
                 println!("Saved widefield_{:02}.png", self.capture_count);
                 let nf_data = self.nf_data.lock().unwrap();
-                PngEncoder::new(BufWriter::new(File::create(format!("nearfield_{:02}.png", self.capture_count)).unwrap())).write_image(&nf_data.image, 98, 98, ColorType::Rgba8).unwrap();
+                PngEncoder::new(BufWriter::new(File::create(format!("nearfield_{:02}.png", self.capture_count)).unwrap())).write_image(&nf_data.gray, 98, 98, ColorType::L8).unwrap();
+                self.captured_nf.push(nf_data.gray);
                 println!("Saved nearfield_{:02}.png", self.capture_count);
                 self.capture_count += 1;
             }
@@ -243,7 +288,7 @@ pub fn main() -> GameResult {
         })
         .window_mode(WindowMode {
             width: 1400.,
-            height: 700.,
+            height: 750.,
             ..Default::default()
         });
     let (mut ctx, event_loop) = cb.build()?;
@@ -255,6 +300,7 @@ fn reader_thread(
     path: String,
     wf_data: Arc<Mutex<PajData>>,
     nf_data: Arc<Mutex<PajData>>,
+    img_channel: SyncSender<(Port, [u8; 98*98])>,
 ) {
     let mut port = serialport::new(path, 115200)
         .timeout(Duration::from_secs(3))
@@ -266,8 +312,6 @@ fn reader_thread(
     }
 
     let mut buf = [0; 9898];
-    let mut time = Instant::now();
-    let mut avg = 0.0;
     loop {
         port.write(b"a").unwrap();
         port.read_exact(&mut buf).unwrap();
@@ -279,12 +323,12 @@ fn reader_thread(
             shiftr(&mut buf, 3);
         }
         let mut paj_data = if id == 0 {
-            // charuco::process_image("wf", &buf[..98*98], 98, 98);
-            chessboard::process_image("wf", &buf[..98*98], 98, 98);
+            let r = img_channel.try_send((Port::Wf, buf[..98*98].try_into().unwrap()));
+            if r.is_err() { println!("channel full"); }
             wf_data.lock().unwrap()
         } else {
-            // charuco::process_image("nf", &buf[..98*98], 98, 98);
-            chessboard::process_image("nf", &buf[..98*98], 98, 98);
+            let r = img_channel.try_send((Port::Nf, buf[..98*98].try_into().unwrap()));
+            if r.is_err() { println!("channel full"); }
             nf_data.lock().unwrap()
         };
         for i in 0..98 * 98 {
@@ -292,13 +336,23 @@ fn reader_thread(
             paj_data.image[4 * i + 1] = buf[i];
             paj_data.image[4 * i + 2] = buf[i];
         }
+        paj_data.gray.copy_from_slice(&buf[..98*98]);
         for (i, mut raw_mot) in buf[98*98..][..256].chunks(16).enumerate() {
             paj_data.mot_data[i] = MotData::parse(&mut raw_mot);
         }
+        paj_data.avg_frame_period = paj_data.avg_frame_period * 7. / 8. + paj_data.last_frame.elapsed().as_secs_f64() / 8.;
+        paj_data.last_frame = Instant::now();
         drop(paj_data);
-        avg = avg * 7. / 8. + time.elapsed().as_secs_f64() / 8.;
-        time = Instant::now();
-        println!("{id} {len}, {:.4}/s", 1. / avg);
+    }
+}
+
+fn opencv_thread(raw_image: Receiver<(Port, [u8; 98*98])>) {
+    loop {
+        let (port, image) = raw_image.recv().unwrap();
+        match port {
+            Port::Wf => chessboard::get_chessboard_corners(&image, Port::Wf, 4, 4, true),
+            Port::Nf => chessboard::get_chessboard_corners(&image, Port::Nf, 4, 4, true),
+        };
     }
 }
 
@@ -321,11 +375,6 @@ fn shiftr(d: &mut [u8], n: u8) {
         t = t2;
     }
 }
-// r = [(d[0] << n) & 0xff]
-// for i in range(1, len(d)):
-//     r[-1] |= d[i]>>(8-n)
-//     r.append((d[i] << n) & 0xff)
-// return bytes(r)
 
 fn drain<T: SerialPort + ?Sized>(port: &mut T) -> u32 {
     let mut drained = 0;
