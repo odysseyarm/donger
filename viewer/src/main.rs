@@ -1,9 +1,9 @@
 use std::{
-    fs::File, io::BufWriter, path::Path, sync::{mpsc::{Receiver, SyncSender}, Arc, Mutex}, time::{Duration, Instant}
+    fs::File, io::BufWriter, path::Path, sync::{atomic::{AtomicU16, Ordering}, mpsc::{Receiver, SyncSender}, Arc, Mutex}, time::{Duration, Instant}
 };
 
 use ggez::{
-    conf::{WindowMode, WindowSetup}, event, glam::*, graphics::{self, Color, DrawParam, ImageFormat, Sampler, Text, Transform}, input::{keyboard::KeyCode, mouse::{cursor_grabbed, set_cursor_grabbed, set_position}}, Context, GameResult
+    conf::{WindowMode, WindowSetup}, event, glam::*, graphics::{self, Color, DrawParam, ImageFormat, Sampler, Text, Transform}, input::{keyboard::{KeyCode, KeyMods}, mouse::{cursor_grabbed, set_cursor_grabbed, set_position}}, Context, GameResult
 };
 use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 use mot_data::MotData;
@@ -46,6 +46,7 @@ struct MainState {
     capture_count: usize,
     captured_nf: Vec<[u8; 98 * 98]>,
     captured_wf: Vec<[u8; 98 * 98]>,
+    board_size: Arc<(AtomicU16, AtomicU16)>, // (width, height)
 }
 
 impl MainState {
@@ -69,12 +70,14 @@ impl MainState {
             capture_count,
             captured_nf: vec![],
             captured_wf: vec![],
+            board_size: Arc::new((4.into(), 4.into())),
         };
         let path = std::env::args().nth(1).unwrap_or("/dev/ttyACM1".into());
         std::thread::spawn(move || {
             reader_thread(path, wf_data, nf_data, img_channel.0);
         });
-        std::thread::spawn(move || opencv_thread(img_channel.1));
+        let board_size = main_state.board_size.clone();
+        std::thread::spawn(move || opencv_thread(img_channel.1, board_size));
         Ok(main_state)
     }
 }
@@ -163,14 +166,29 @@ impl event::EventHandler<ggez::GameError> for MainState {
             ),
             ..Default::default()
         });
-        canvas.draw(&Text::new(format!("Captured {} images", self.captured_wf.len())), DrawParam {
+        let cols = self.board_size.0.load(Ordering::Relaxed);
+        let rows = self.board_size.1.load(Ordering::Relaxed);
+        canvas.draw(&Text::new(format!("Captures: {}    Board: ({}, {})", self.captured_wf.len(), cols, rows)), DrawParam {
             color: Color::WHITE,
             transform: Transform::Matrix(
                 [
                     [1., 0., 0., 0.],
                     [0., 1., 0., 0.],
                     [0., 0., 1., 0.],
-                    [0., 7. * 98. + 16., 0., 1.],
+                    [0., 7. * 98. + 18., 0., 1.],
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        canvas.draw(&Text::new("<1> calib nf    <2> calib wf    <3> stereo calib    <Space> capture    <Backspace> clear    <Esc> close    <R> rows    <C> cols"), DrawParam {
+            color: Color::WHITE,
+            transform: Transform::Matrix(
+                [
+                    [1., 0., 0., 0.],
+                    [0., 1., 0., 0.],
+                    [0., 0., 1., 0.],
+                    [0., 7. * 98. + 36., 0., 1.],
                 ]
                 .into(),
             ),
@@ -222,52 +240,93 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 println!("Saved nearfield_{:02}.png", self.capture_count);
                 self.capture_count += 1;
             }
+            Some(KeyCode::Back) => {
+                self.captured_nf.clear();
+                self.captured_wf.clear();
+            }
+            Some(KeyCode::Key1) => {
+                // calibrate nf
+                println!("Calibrating nearfield from {} images", self.captured_nf.len());
+                let captures = self.captured_nf.clone();
+                let board_cols = self.board_size.0.load(Ordering::Relaxed);
+                let board_rows = self.board_size.1.load(Ordering::Relaxed);
+                std::thread::spawn(move || {
+                    chessboard::my_calibrate_single(&captures, Port::Nf, board_rows, board_cols);
+                });
+            }
+            Some(KeyCode::Key2) => {
+                // calibrate wf
+                println!("Calibrating widefield from {} images", self.captured_wf.len());
+                let captures = self.captured_wf.clone();
+                let board_cols = self.board_size.0.load(Ordering::Relaxed);
+                let board_rows = self.board_size.1.load(Ordering::Relaxed);
+                std::thread::spawn(move || {
+                    chessboard::my_calibrate_single(&captures, Port::Wf, board_rows, board_cols);
+                });
+            }
+            Some(KeyCode::Key3) => {
+                // calibrate stereo
+            }
+            Some(KeyCode::R) => {
+                if input.mods.contains(KeyMods::SHIFT) {
+                    self.board_size.1.fetch_sub(1, Ordering::Relaxed);
+                } else {
+                    self.board_size.1.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+            Some(KeyCode::C) => {
+                if input.mods.contains(KeyMods::SHIFT) {
+                    self.board_size.0.fetch_sub(1, Ordering::Relaxed);
+                } else {
+                    self.board_size.0.fetch_add(1, Ordering::Relaxed);
+                }
+            }
             _ => (),
         }
         Ok(())
     }
 
-    fn mouse_button_down_event(
-            &mut self,
-            ctx: &mut Context,
-            button: event::MouseButton,
-            _x: f32,
-            _y: f32,
-        ) -> Result<(), ggez::GameError> {
-        match button {
-            event::MouseButton::Left => set_cursor_grabbed(ctx, true),
-            _ => Ok(()),
-        }
-    }
-
-    fn mouse_button_up_event(
-            &mut self,
-            ctx: &mut Context,
-            button: event::MouseButton,
-            _x: f32,
-            _y: f32,
-        ) -> Result<(), ggez::GameError> {
-        match button {
-            event::MouseButton::Left => set_cursor_grabbed(ctx, false),
-            _ => Ok(()),
-        }
-    }
-
-    fn mouse_motion_event(
-            &mut self,
-            ctx: &mut Context,
-            x: f32,
-            y: f32,
-            dx: f32,
-            dy: f32,
-        ) -> Result<(), ggez::GameError> {
-        if cursor_grabbed(ctx) {
-            let res = ctx.gfx.drawable_size();
-            let scale = ctx.gfx.window().scale_factor() as f32;
-            set_position(ctx, Vec2::new(700., 350.) / scale)?;
-        }
-        Ok(())
-    }
+    // fn mouse_button_down_event(
+    //         &mut self,
+    //         ctx: &mut Context,
+    //         button: event::MouseButton,
+    //         _x: f32,
+    //         _y: f32,
+    //     ) -> Result<(), ggez::GameError> {
+    //     match button {
+    //         event::MouseButton::Left => set_cursor_grabbed(ctx, true),
+    //         _ => Ok(()),
+    //     }
+    // }
+    //
+    // fn mouse_button_up_event(
+    //         &mut self,
+    //         ctx: &mut Context,
+    //         button: event::MouseButton,
+    //         _x: f32,
+    //         _y: f32,
+    //     ) -> Result<(), ggez::GameError> {
+    //     match button {
+    //         event::MouseButton::Left => set_cursor_grabbed(ctx, false),
+    //         _ => Ok(()),
+    //     }
+    // }
+    //
+    // fn mouse_motion_event(
+    //         &mut self,
+    //         ctx: &mut Context,
+    //         x: f32,
+    //         y: f32,
+    //         dx: f32,
+    //         dy: f32,
+    //     ) -> Result<(), ggez::GameError> {
+    //     if cursor_grabbed(ctx) {
+    //         let res = ctx.gfx.drawable_size();
+    //         let scale = ctx.gfx.window().scale_factor() as f32;
+    //         set_position(ctx, Vec2::new(700., 350.) / scale)?;
+    //     }
+    //     Ok(())
+    // }
 }
 
 pub fn main() -> GameResult {
@@ -323,12 +382,10 @@ fn reader_thread(
             shiftr(&mut buf, 3);
         }
         let mut paj_data = if id == 0 {
-            let r = img_channel.try_send((Port::Wf, buf[..98*98].try_into().unwrap()));
-            if r.is_err() { println!("channel full"); }
+            let _ = img_channel.try_send((Port::Wf, buf[..98*98].try_into().unwrap()));
             wf_data.lock().unwrap()
         } else {
-            let r = img_channel.try_send((Port::Nf, buf[..98*98].try_into().unwrap()));
-            if r.is_err() { println!("channel full"); }
+            let _ = img_channel.try_send((Port::Nf, buf[..98*98].try_into().unwrap()));
             nf_data.lock().unwrap()
         };
         for i in 0..98 * 98 {
@@ -346,12 +403,14 @@ fn reader_thread(
     }
 }
 
-fn opencv_thread(raw_image: Receiver<(Port, [u8; 98*98])>) {
+fn opencv_thread(raw_image: Receiver<(Port, [u8; 98*98])>, board_size: Arc<(AtomicU16, AtomicU16)>) {
     loop {
         let (port, image) = raw_image.recv().unwrap();
+        let board_cols = board_size.0.load(Ordering::Relaxed);
+        let board_rows = board_size.1.load(Ordering::Relaxed);
         match port {
-            Port::Wf => chessboard::get_chessboard_corners(&image, Port::Wf, 4, 4, true),
-            Port::Nf => chessboard::get_chessboard_corners(&image, Port::Nf, 4, 4, true),
+            Port::Wf => chessboard::get_chessboard_corners(&image, Port::Wf, board_rows, board_cols, true),
+            Port::Nf => chessboard::get_chessboard_corners(&image, Port::Nf, board_rows, board_cols, true),
         };
     }
 }
