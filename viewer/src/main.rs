@@ -251,7 +251,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 let board_cols = self.board_size.0.load(Ordering::Relaxed);
                 let board_rows = self.board_size.1.load(Ordering::Relaxed);
                 std::thread::spawn(move || {
-                    chessboard::my_calibrate_single(&captures, Port::Nf, board_rows, board_cols);
+                    chessboard::calibrate_single(&captures, Port::Nf, board_rows, board_cols);
                 });
             }
             Some(KeyCode::Key2) => {
@@ -261,7 +261,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 let board_cols = self.board_size.0.load(Ordering::Relaxed);
                 let board_rows = self.board_size.1.load(Ordering::Relaxed);
                 std::thread::spawn(move || {
-                    chessboard::my_calibrate_single(&captures, Port::Wf, board_rows, board_cols);
+                    chessboard::calibrate_single(&captures, Port::Wf, board_rows, board_cols);
                 });
             }
             Some(KeyCode::Key3) => {

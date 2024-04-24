@@ -36,7 +36,7 @@ pub fn my_stereo_calibrate(
     // let reproj_err = stereo_calibrate(&object_points, &wf_corners_arr, &nf_corners_arr, wf_camera_matrix, wf_dist_coeffs, nf_camera_matrix, nf_dist_coeffs, (98, 98).into(), r, t, e, f, flags, criteria).unwrap();
 }
 
-pub fn my_calibrate_single(
+pub fn calibrate_single(
     images: &[[u8; 98 * 98]],
     port: Port,
     board_rows: u16,
