@@ -39,6 +39,7 @@ pub fn my_stereo_calibrate(
     }
     let object_points = object_points;
 
+    let mut object_points_arr = Vector::<Vector<Point3f>>::new();
     let mut wf_corners_arr = Vector::<Vector<Point2f>>::new();
     let mut nf_corners_arr = Vector::<Vector<Point2f>>::new();
     for (wf_image, nf_image) in wf.iter().zip(nf) {
@@ -54,6 +55,7 @@ pub fn my_stereo_calibrate(
         };
         wf_corners_arr.push(wf_corners);
         nf_corners_arr.push(nf_corners);
+        object_points_arr.push(object_points.clone());
     }
     let mut r = Mat::default();
     let mut t = Mat::default();
@@ -63,7 +65,7 @@ pub fn my_stereo_calibrate(
         epsilon: 1e-6,
     };
     let reproj_err = stereo_calibrate(
-        &object_points,
+        &object_points_arr,
         &wf_corners_arr,
         &nf_corners_arr,
         wf_camera_matrix,
