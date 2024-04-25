@@ -246,7 +246,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             }
             Some(KeyCode::Key1) => {
                 // calibrate nf
-                println!("Calibrating nearfield from {} images", self.captured_nf.len());
+                println!("Calibrating nearfield from {} captures", self.captured_nf.len());
                 let captures = self.captured_nf.clone();
                 let board_cols = self.board_size.0.load(Ordering::Relaxed);
                 let board_rows = self.board_size.1.load(Ordering::Relaxed);
@@ -256,7 +256,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             }
             Some(KeyCode::Key2) => {
                 // calibrate wf
-                println!("Calibrating widefield from {} images", self.captured_wf.len());
+                println!("Calibrating widefield from {} captures", self.captured_wf.len());
                 let captures = self.captured_wf.clone();
                 let board_cols = self.board_size.0.load(Ordering::Relaxed);
                 let board_rows = self.board_size.1.load(Ordering::Relaxed);
@@ -265,7 +265,14 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 });
             }
             Some(KeyCode::Key3) => {
-                // calibrate stereo
+                println!("Calibrating stereo from {} captures", self.captured_wf.len());
+                let wf = self.captured_wf.clone();
+                let nf = self.captured_nf.clone();
+                let board_cols = self.board_size.0.load(Ordering::Relaxed);
+                let board_rows = self.board_size.1.load(Ordering::Relaxed);
+                std::thread::spawn(move || {
+                    chessboard::my_stereo_calibrate(&wf, &nf, board_rows, board_cols);
+                });
             }
             Some(KeyCode::R) => {
                 if input.mods.contains(KeyMods::SHIFT) {

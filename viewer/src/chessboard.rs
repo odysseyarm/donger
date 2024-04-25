@@ -1,8 +1,19 @@
 use opencv::{
-    calib3d::{calibrate_camera, draw_chessboard_corners, find_chessboard_corners_sb, find_chessboard_corners_sb_with_meta, stereo_calibrate, CALIB_CB_ACCURACY, CALIB_CB_LARGER, CALIB_CB_MARKER, CALIB_CB_NORMALIZE_IMAGE}, core::{flip, no_array, FileStorage, FileStorage_FORMAT_YAML, FileStorage_WRITE, Mat, Point2f, Point3f, Size, TermCriteria, TermCriteria_COUNT, TermCriteria_EPS, TermCriteria_MAX_ITER, ToInputArray, Vector, ROTATE_180}, highgui::{imshow, poll_key}, hub_prelude::{FileStorageTrait, FileStorageTraitConst, MatTraitConst}, imgproc::{corner_sub_pix, cvt_color, resize, COLOR_GRAY2BGR, INTER_CUBIC}
+    calib3d::{calibrate_camera, draw_chessboard_corners, find_chessboard_corners_sb, stereo_calibrate, CALIB_CB_ACCURACY, CALIB_CB_NORMALIZE_IMAGE, CALIB_FIX_INTRINSIC}, core::{flip, no_array, FileStorage, FileStorage_FORMAT_YAML, FileStorage_READ, FileStorage_WRITE, Mat, Point2f, Point3f, Size, TermCriteria, TermCriteria_COUNT, TermCriteria_EPS, Vector, ROTATE_180}, highgui::{imshow, poll_key}, hub_prelude::{FileNodeTraitConst, FileStorageTrait, FileStorageTraitConst}, imgproc::{cvt_color, resize, COLOR_GRAY2BGR, INTER_CUBIC}
 };
 
 use crate::Port;
+
+pub fn read_camara_params(path: &str) -> Option<(Mat, Mat)> {
+    let fs = FileStorage::new_def(path, FileStorage_READ).unwrap();
+    if !fs.is_opened().unwrap() {
+        None
+    } else {
+        let camera_matrix = fs.get("camera_matrix").unwrap().mat().unwrap();
+        let dist_coeffs = fs.get("dist_coeffs").unwrap().mat().unwrap();
+        Some((camera_matrix, dist_coeffs))
+    }
+}
 
 pub fn my_stereo_calibrate(
     wf: &[[u8; 98 * 98]],
@@ -10,6 +21,15 @@ pub fn my_stereo_calibrate(
     board_rows: u16,
     board_cols: u16,
 ) {
+    let Some((nf_camera_matrix, nf_dist_coeffs)) = &mut read_camara_params("nearfield.yml") else {
+        println!("Couldn't get nearfield intrinsics");
+        return;
+    };
+    let Some((wf_camera_matrix, wf_dist_coeffs)) = &mut read_camara_params("widefield.yml") else {
+        println!("Couldn't get widefield intrinsics");
+        return;
+    };
+
     let square_length = 1.0; // 4x4 chessboard on my phone is barely above 1 cm
     let mut object_points = Vector::<Point3f>::new();
     for y in 0..board_rows {
@@ -22,18 +42,54 @@ pub fn my_stereo_calibrate(
     let mut wf_corners_arr = Vector::<Vector<Point2f>>::new();
     let mut nf_corners_arr = Vector::<Vector<Point2f>>::new();
     for (wf_image, nf_image) in wf.iter().zip(nf) {
-        let Some(wf_corners) = get_chessboard_corners(wf_image, Port::Wf, board_rows, board_cols, false) else { continue };
-        let Some(nf_corners) = get_chessboard_corners(nf_image, Port::Nf, board_rows, board_cols, false) else { continue };
+        let Some(wf_corners) =
+            get_chessboard_corners(wf_image, Port::Wf, board_rows, board_cols, false)
+        else {
+            continue;
+        };
+        let Some(nf_corners) =
+            get_chessboard_corners(nf_image, Port::Nf, board_rows, board_cols, false)
+        else {
+            continue;
+        };
         wf_corners_arr.push(wf_corners);
         nf_corners_arr.push(nf_corners);
     }
-    let [r, t, e, f, rvecs, tvecs]: &mut [Mat; 6] = &mut Default::default();
+    let mut r = Mat::default();
+    let mut t = Mat::default();
     let criteria = TermCriteria {
         typ: TermCriteria_EPS + TermCriteria_COUNT,
         max_count: 30,
         epsilon: 1e-6,
     };
-    // let reproj_err = stereo_calibrate(&object_points, &wf_corners_arr, &nf_corners_arr, wf_camera_matrix, wf_dist_coeffs, nf_camera_matrix, nf_dist_coeffs, (98, 98).into(), r, t, e, f, flags, criteria).unwrap();
+    let reproj_err = stereo_calibrate(
+        &object_points,
+        &wf_corners_arr,
+        &nf_corners_arr,
+        wf_camera_matrix,
+        wf_dist_coeffs,
+        nf_camera_matrix,
+        nf_dist_coeffs,
+        (98, 98).into(),
+        &mut r,
+        &mut t,
+        &mut no_array(),
+        &mut no_array(),
+        CALIB_FIX_INTRINSIC,
+        criteria,
+    )
+    .unwrap();
+    println!("RMS error: {}", reproj_err);
+
+    let mut fs = FileStorage::new_def("stereo.yml", FileStorage_WRITE | FileStorage_FORMAT_YAML).unwrap();
+    if fs.is_opened().unwrap() {
+        fs.write_mat("r", &r).unwrap();
+        fs.write_mat("t", &t).unwrap();
+        fs.write_f64("rms_error", reproj_err).unwrap();
+        fs.write_i32("num_captures", wf.len() as i32).unwrap();
+    } else {
+        println!("Failed to open stereo.yml");
+    }
 }
 
 pub fn calibrate_single(
@@ -73,6 +129,7 @@ pub fn calibrate_single(
         fs.write_mat("camera_matrix", &camera_matrix).unwrap();
         fs.write_mat("dist_coeffs", &dist_coeffs).unwrap();
         fs.write_f64("rms_error", reproj_err).unwrap();
+        fs.write_i32("num_captures", images.len() as i32).unwrap();
         fs.release().unwrap();
     } else {
         println!("Failed to open {}", filename);
