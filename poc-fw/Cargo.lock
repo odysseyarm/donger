@@ -107,7 +107,7 @@ checksum = "e37549a379a9e0e6e576fd208ee60394ccb8be963889eebba3ffe0980364f472"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -143,7 +143,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -154,7 +154,7 @@ checksum = "d336a2a514f6ccccaa3e09b02d41d35330c07ddf03a62165fcec10bb561c7806"
 dependencies = [
  "darling_core",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -177,7 +177,7 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -209,31 +209,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "donger-firmware"
-version = "0.1.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "defmt",
- "defmt-rtt",
- "embassy-executor",
- "embassy-futures",
- "embassy-nrf",
- "embassy-sync",
- "embassy-time",
- "embassy-usb",
- "paj7025-nrf",
- "panic-probe",
- "static_cell",
-]
-
-[[package]]
 name = "embassy-embedded-hal"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41fea5ef5bed4d3468dfd44f5c9fa4cda8f54c86d4fb4ae683eacf9d39e2ea12"
 dependencies = [
- "defmt",
  "embassy-futures",
  "embassy-sync",
  "embassy-time",
@@ -253,7 +233,6 @@ checksum = "90327bcc66333a507f89ecc4e2d911b265c45f5c9bc241f98eee076752d35ac6"
 dependencies = [
  "cortex-m",
  "critical-section",
- "defmt",
  "document-features",
  "embassy-executor-macros",
 ]
@@ -267,7 +246,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -275,9 +254,6 @@ name = "embassy-futures"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f878075b9794c1e4ac788c95b728f26aa6366d32eeb10c7051389f898f7d067"
-dependencies = [
- "defmt",
-]
 
 [[package]]
 name = "embassy-hal-internal"
@@ -287,7 +263,6 @@ checksum = "0ef3bac31ec146321248a169e9c7b5799f1e0b3829c7a9b324cb4600a7438f59"
 dependencies = [
  "cortex-m",
  "critical-section",
- "defmt",
  "num-traits",
 ]
 
@@ -319,7 +294,6 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "critical-section",
- "defmt",
  "document-features",
  "embassy-embedded-hal",
  "embassy-hal-internal",
@@ -348,7 +322,6 @@ checksum = "8d2c8cdff05a7a51ba0087489ea44b0b1d97a296ca6b1d6d1a33ea7423d34049"
 dependencies = [
  "cfg-if",
  "critical-section",
- "defmt",
  "embedded-io-async",
  "futures-sink",
  "futures-util",
@@ -392,9 +365,9 @@ dependencies = [
 
 [[package]]
 name = "embassy-usb"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d0b882133fa684b9d4652351cd7aac5afe8a2c2bf4a7da59f442ff61087cda2"
+checksum = "6e651b9b7b47b514e6e6d1940a6e2e300891a2c33641917130643602a0cb6386"
 dependencies = [
  "embassy-futures",
  "embassy-net-driver-channel",
@@ -410,9 +383,6 @@ name = "embassy-usb-driver"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fc247028eae04174b6635104a35b1ed336aabef4654f5e87a8f32327d231970"
-dependencies = [
- "defmt",
-]
 
 [[package]]
 name = "embedded-hal"
@@ -437,6 +407,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c4c685bbef7fe13c3c6dd4da26841ed3980ef33e841cddfa15ce8a8fb3f1884"
 dependencies = [
  "embedded-hal 1.0.0",
+]
+
+[[package]]
+name = "embedded-hal-bus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513e0b3a8fb7d3013a8ae17a834283f170deaf7d0eeab0a7c1a36ad4dd356d22"
+dependencies = [
+ "critical-section",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
 ]
 
 [[package]]
@@ -602,6 +583,7 @@ checksum = "d334027d6703534f2a80de0794ae435c0e029358d28278533d3935e69b221b01"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+ "defmt",
 ]
 
 [[package]]
@@ -615,18 +597,17 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.20.2"
+version = "1.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
+checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
 
 [[package]]
-name = "paj7025-nrf"
+name = "pag7661qn"
 version = "0.1.0"
 dependencies = [
  "defmt",
- "embassy-embedded-hal",
- "embassy-nrf",
- "embassy-time",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
 ]
 
 [[package]]
@@ -650,6 +631,27 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "poc-fw"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt",
+ "defmt-rtt",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-nrf",
+ "embassy-sync",
+ "embassy-time",
+ "embassy-usb",
+ "embedded-hal 1.0.0",
+ "embedded-hal-bus",
+ "nrf-pac",
+ "pag7661qn",
+ "panic-probe",
+]
 
 [[package]]
 name = "portable-atomic"
@@ -676,7 +678,7 @@ dependencies = [
  "proc-macro-error-attr2",
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -744,7 +746,7 @@ checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -762,15 +764,6 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
-
-[[package]]
-name = "static_cell"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d89b0684884a883431282db1e4343f34afc2ff6996fe1f4a1664519b66e14c1e"
-dependencies = [
- "portable-atomic",
-]
 
 [[package]]
 name = "strsim"
@@ -791,9 +784,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.96"
+version = "2.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5d0adab1ae378d7f53bdebc67a39f1f151407ef230f0ce2883572f5d8985c80"
+checksum = "36147f1a48ae0ec2b5b3bc5b537d267457555a10dc06f3dbc8cb11ba3006d3b1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -817,7 +810,7 @@ checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -923,5 +916,5 @@ checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.96",
+ "syn 2.0.98",
 ]
