@@ -90,23 +90,10 @@ fn stroke_circle(
 fn get_circle_centers(im: &impl ToInputArray, rows: usize, cols: usize) -> Vector<Point2f> {
     let mut centers = Vector::<Point2f>::default();
 
-    let mut params = SimpleBlobDetector_Params::default().unwrap();
-    // params.min_threshold = 125.0;
-    // params.max_threshold = 127.0;
-    // params.threshold_step = 1.0;
-    // params.min_area = 80.0;
-    // params.max_area = 10000.0;
-    // params.filter_by_area = false;
-    // params.filter_by_convexity = false;
-    // params.min_convexity = 0.87;
-    // params.min_circularity = 0.2;
-    // params.filter_by_circularity = false;
-    // params.min_inertia_ratio = 0.1;
-    // params.filter_by_inertia = false;
-
+    let params = SimpleBlobDetector_Params::default().unwrap();
     let mut circle_grid_finder_params = CirclesGridFinderParameters::default().unwrap();
     circle_grid_finder_params.grid_type = opencv::calib3d::CirclesGridFinderParameters_GridType::ASYMMETRIC_GRID;
-    let mut simple_blob_detector = SimpleBlobDetector::create(params).unwrap();
+    let simple_blob_detector = SimpleBlobDetector::create(params).unwrap();
     let feature2d_detector: Ptr<Feature2D> = Ptr::from(simple_blob_detector);
 
     let pattern_was_found = find_circles_grid(
@@ -123,6 +110,23 @@ fn get_circle_centers(im: &impl ToInputArray, rows: usize, cols: usize) -> Vecto
         }
         centers
     } else {
+        {
+            let mut simple_blob_detector = SimpleBlobDetector::create(params).unwrap();
+            let mut keypoints = Vector::default();
+            simple_blob_detector.detect_def(im, &mut keypoints).unwrap();
+            let new_im = im.input_array().unwrap().get_mat_def().unwrap().clone();
+            let mut new_im = {
+                let mut tmp = Mat::default();
+                resize(&new_im, &mut tmp, (500, 500).into(), 0.0, 0.0, INTER_NEAREST).unwrap();
+                tmp
+            };
+            keypoints.iter().for_each(|kp| {
+                let pt = (kp.pt() + (0.5, 0.5).into()) * 500.0 / 98.0 - (0.5, 0.5).into();
+                let size = (kp.size() * 500.0 / 98.0) as f64;
+                stroke_circle(&mut new_im, (pt.x as f64, pt.y as f64), size / 2.0, [0.0, 0.0, 255.0, 255.0], 1).unwrap();
+            });
+            imshow_multi(&[&new_im], "fail");
+        }
         panic!("failed to find circle grid");
     }
 }
@@ -182,10 +186,10 @@ fn overlay_circles(
 fn main() {
     // ===== read images =====
     let mut circle_centers = vec![];
-    let radius = 0.006; // 6 mm
-    let diag_sp = 0.015; // 15 mm
-    let board_rows = 5;
-    let board_cols = 2;
+    let radius = 0.0045; // 9 mm
+    let diag_sp = 0.012; // 12 mm
+    let board_rows = 3;
+    let board_cols = 5;
     let vert_len = (2.0f64*diag_sp*diag_sp).sqrt() / 2.0;
     for c in 0..board_cols {
         for r in 0..board_rows {
