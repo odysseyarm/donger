@@ -24,9 +24,9 @@ fn get_circle_centers(im: &impl ToInputArray, rows: usize, cols: usize) -> Vecto
         circle_grid_finder_params,
     ).unwrap();
     if pattern_was_found {
-        for c in centers.as_mut_slice() {
-            *c *= 4094.0 / 97.0;
-        }
+        // for c in centers.as_mut_slice() {
+        //     *c *= 4094.0 / 97.0;
+        // }
         centers
     } else {
         {
@@ -58,7 +58,8 @@ fn overlay_circles(
     e: Matrix3<f64>,
 ) {
     let canvas_scale = 10_000.0;
-    let output_size = Size::new(800, 800);
+    // let output_size = Size::new(800, 800);
+    let output_size = Size::new(320*3, 240*3);
     let og_size = dst.size().unwrap();
     let output_scale_x = output_size.width as f64 / og_size.width as f64;
     let output_scale_y = output_size.height as f64 / og_size.height as f64;
@@ -82,20 +83,14 @@ fn overlay_circles(
         1.0, 0.0, 0.5;
         0.0, 1.0, 0.5;
         0.0, 0.0, 1.0;
-    ] * matrix![
-        97.0/4094.0, 0.0, 0.0;
-        0.0, 97.0/4094.0, 0.0;
-        0.0, 0.0, 1.0;
     ];
-    // let mat = (output_scale_mat*k*e*canvas_scale_mat).transpose(); // nalgebra is column major
-    // let mat = Mat::new_rows_cols_with_data(3, 3, mat.as_slice()).unwrap();
-    // warp_perspective(&im, &mut cam, &mat, output_size, INTER_LINEAR, BORDER_CONSTANT, [0.; 4].into()).unwrap();
+
     let mut cam = Mat::default();
     distort_image(
         &im,
         &mut cam,
         &(output_scale_mat*k),
-        intrinsics.distortion.as_ref().unwrap_or(&[0.0; 5]),
+        intrinsics.distortion.as_ref().unwrap(),
         output_size,
         &(e*canvas_scale_mat).try_inverse().unwrap(),
     );
@@ -104,10 +99,10 @@ fn overlay_circles(
     let cam_data = cam.data_bytes().unwrap();
     let dst_data = dst.data_typed_mut::<Vec3b>().unwrap();
     for (cam_p, dst_p) in zip(cam_data, dst_data) {
-        let c = *cam_p as f32 / 255.;
+        let c = *cam_p as f32 / 255. * 0.5;
         dst_p.0[0] = (dst_p.0[0] as f32*(1.-c)) as u8;
         dst_p.0[1] = (dst_p.0[1] as f32*(1.-c)) as u8;
-        dst_p.0[2] = (dst_p.0[2] as f32*(1.-c)) as u8 + *cam_p;
+        dst_p.0[2] = (dst_p.0[2] as f32*(1.-c)) as u8 + *cam_p / 2;
     }
 }
 
@@ -131,13 +126,7 @@ fn main() {
 
     let mut imgs = vec![];
     let mut images_points: Vec<OMatrix<f64, U2, Dyn>> = vec![];
-    let args: Vec<_> = std::env::args().collect();
-    let mut args = &args[1..];
-    let calib_distortion = args[0] == "-d";
-    if calib_distortion {
-        args = &args[1..];
-    }
-    for arg in args {
+    for arg in std::env::args().skip(1) {
         let im = imread_def(&arg).unwrap();
         let cc = get_circle_centers(&im, board_rows, board_cols);
         images_points.push(
@@ -152,9 +141,9 @@ fn main() {
         &circle_centers.iter().copied().map(|p| vector![p.0, p.1, 0.0]).collect::<Vec<_>>(),
         &images_points,
         radius.into(),
-        100.0,
-        45.0,
-        45.0,
+        500.0,
+        160.0,
+        120.0,
         [0., 0., 0.50].into(),
         true,
     );
