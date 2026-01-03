@@ -13,6 +13,7 @@ target = "thumbv7em-none-eabihf"
 [env]
 DEFMT_LOG = "info"
 BOARD = "dongle"
+EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "32768"
 
 [patch.crates-io]
 minicbor = { git = "https://github.com/Abrahamh08/minicbor" }
