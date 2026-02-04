@@ -3,7 +3,8 @@
     "allow": [
       "mcp__acp__Bash",
       "mcp__acp__Edit",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
