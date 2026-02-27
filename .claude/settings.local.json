@@ -4,7 +4,11 @@
       "mcp__acp__Bash",
       "mcp__acp__Edit",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(APP_BANK=bank_a cargo build:*)",
+      "Bash(echo:*)",
+      "Bash(python3:*)",
+      "Bash(APP_BANK=bank_a cargo clean:*)"
     ]
   }
 }
